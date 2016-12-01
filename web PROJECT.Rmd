@@ -1,0 +1,324 @@
+---
+title: "Website Analysis Project, STAT 578"
+shorttitle: "Website Analysis Project, STAT 578"
+author: "Yukun Zhang, Wenke Huang, Yubai Yuan"
+institution: "University of Illinois at Urbana-Champaign"
+date: "November 2016"
+fontsize: 9pt
+section-titles: false
+output: 
+   uiucthemes::uiuc_beamer:
+     latex_engine: xelatex
+---
+
+# STAT 578
+
+## Web Project
+
+### Introduction
+
+This project aims to use any given information from the downloading counts of package which include `rcpp`, `ggplot2`, `dplyr` and `stringr` to predict the future dowloading counts.
+
+First we visualize the whole data set to make us have a better understanding of this time series. The function `make_download_plot` that we used here was offered by Mr. Balamuta and Prof. Guerrier.
+
+It is pretty obvious that this time series has nonlinearity trends from 01/01/2015 to yesterday which are a little less than 2 years in total. In order to have a better understanding of this model, we would also like to visualize the first differenced plot.
+
+### Introduction
+
+\scriptsize
+```{r, echo=FALSE, message=FALSE, warning=FALSE, error=FALSE}
+library(cranlogs)
+rcpp.dwn <- cran_downloads(
+  package = "Rcpp",
+  from = "2015-01-01",
+  to = "2016-11-28"
+)
+ggplot2.dwn <- cran_downloads(
+  package = "ggplot2",
+  from = "2015-01-01",
+  to = "2016-11-28"
+)
+dplyr.dwn <- cran_downloads(
+  package = "dplyr",
+  from = "2015-01-01",
+  to = "2016-11-28"
+)
+stringr.dwn <- cran_downloads(
+  package = "stringr",
+  from = "2015-01-01",
+  to = "2016-11-28"
+)
+
+dat.mat <- rbind(
+  rcpp.dwn,
+  ggplot2.dwn,
+  dplyr.dwn,
+  stringr.dwn
+)
+
+library(ggplot2)
+library("tidyverse")
+
+make_download_plot = function(input_data){
+  ggplot(input_data,
+         aes(x = date, y = count,
+             color = package, group = package)) +
+    geom_line() +
+    labs(x = "Time", y = "Downloads", color = "Package") +
+    theme(axis.text.x = element_text(angle = 20, hjust = 1))
+}
+detach("package:dplyr", unload=TRUE)
+
+make_download_plot(dat.mat) + 
+  ggtitle("Original Data Set")
+```
+
+\normalsize
+
+### Introduction
+
+\scriptsize
+```{r, echo=FALSE}
+FirstDiff <- function(dataset){
+  data.frame(seq(1, (nrow(dataset)-1)),
+             diff(dataset[,2], lag = 1),
+             rep(dataset[1,3],(nrow(dataset)-1)))
+}
+
+FirstDiff.rcpp <- FirstDiff(rcpp.dwn)
+colnames(FirstDiff.rcpp) <- c("order", "count", "package")
+FirstDiff.ggplot2 <- FirstDiff(ggplot2.dwn)
+colnames(FirstDiff.ggplot2) <- c("order", "count", "package")
+FirstDiff.dplyr <- FirstDiff(dplyr.dwn)
+colnames(FirstDiff.dplyr) <- c("order", "count", "package")
+FirstDiff.stringr <- FirstDiff(stringr.dwn)
+colnames(FirstDiff.stringr) <- c("order", "count", "package")
+dat.mat2 <- rbind(
+  FirstDiff.rcpp,
+  FirstDiff.ggplot2,
+  FirstDiff.dplyr,
+  FirstDiff.stringr
+)
+
+make_download_plot2 = function(input_data){
+  ggplot(input_data,
+         aes(x = order, y = count,
+             color = package, group = package)) +
+    geom_line() +
+    labs(x = "Time", y = "Downloads", color = "Package") +
+    theme(axis.text.x = element_text(angle = 20, hjust = 1))
+}
+make_download_plot2(dat.mat2) +
+  ggtitle("First Differenced Series Data Set")
+```
+
+\normalsize
+
+### Model Fitting - SETAR Model
+
+We would like to try the Self-exciting Threshold Autoregressive Model as our first attempt. First we test the nonlinearity of the data by using likelihood ratio test. We will focus on the first differenced series instead of the original one.
+
+$H_0:$ First Differenced time series follows a normal AR process
+
+$H_a:$ First Differenced time series follows a TAR process
+
+\scriptsize
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(nonlinearTseries)
+rcpp.stat <- nonlinearityTest(FirstDiff.rcpp[,2], verbose=FALSE)$TarTest$test.statistic
+rcpp.p <-nonlinearityTest(FirstDiff.rcpp[,2], verbose=FALSE)$TarTest$p.value
+ggplot2.stat <-nonlinearityTest(FirstDiff.ggplot2[,2], verbose=FALSE)$TarTest$test.statistic
+ggplot2.p <-nonlinearityTest(FirstDiff.ggplot2[,2], verbose=FALSE)$TarTest$p.value
+dplyr.stat <-nonlinearityTest(FirstDiff.dplyr[,2], verbose=FALSE)$TarTest$test.statistic
+dplyr.p <-nonlinearityTest(FirstDiff.dplyr[,2], verbose=FALSE)$TarTest$p.value
+stringr.stat <-nonlinearityTest(FirstDiff.stringr[,2], verbose=FALSE)$TarTest$test.statistic
+stringr.p <-nonlinearityTest(FirstDiff.stringr[,2], verbose=FALSE)$TarTest$p.value
+library(knitr)
+nonlinearTest <- data.frame(rbind(
+  c(rcpp.stat, rcpp.p),
+  c(ggplot2.stat, ggplot2.p),
+  c(dplyr.stat, dplyr.p),
+  c(stringr.stat, dplyr.p)))
+names(nonlinearTest) <- c("Statistic", "P.value")
+rownames(nonlinearTest) <- c("rcpp", "ggplot2", "dplyr", "stringr")
+kable(nonlinearTest,
+      align = "c",
+      caption = "Nonlinearity Test")
+```
+
+\normalsize
+
+Based on test, we reject $H_0$ and conclude that it follows a TAR process.
+
+### Model Fitting (continue)
+
+The maximum lag order is considered as 7 for both high and low regimes in all of the models. `Pooled-AIC` is the metric here to help us find the best model. The outputs shown below are of packages `rcpp`, `ggplot2`, `dplyr` and `stringr`, respectively.
+
+\scriptsize
+```{r, echo=FALSE, message=FALSE, warning=FALSE, cache=TRUE}
+set.seed(578)
+library(tsDyn)
+selection.rcpp <- selectSETAR(
+  x = ts(FirstDiff.rcpp[,2]),
+  d = 1, 
+  steps = 1,
+  mH = 7,
+  mL = 7,
+  thDelay = 0,
+  trace = FALSE,
+  plot = FALSE
+)
+
+selection.ggplot2 <- selectSETAR(
+  x = ts(FirstDiff.ggplot2[,2]),
+  d = 1, 
+  steps = 1,
+  mH = 7,
+  mL = 7,
+  thDelay = 0,
+  trace = FALSE,
+  plot = FALSE
+)
+
+selection.dplyr <- selectSETAR(
+  x = ts(FirstDiff.dplyr[,2]),
+  d = 1, 
+  steps = 1,
+  mH = 7,
+  mL = 7,
+  thDelay = 0,
+  trace = FALSE,
+  plot = FALSE
+)
+
+selection.stringr <- selectSETAR(
+  x = ts(FirstDiff.stringr[,2]),
+  d = 1, 
+  steps = 1,
+  mH = 7,
+  mL = 7,
+  thDelay = 0,
+  trace = FALSE,
+  plot = FALSE
+)
+```
+
+```{r}
+selection.rcpp$bests
+selection.ggplot2$bests
+selection.dplyr$bests
+selection.stringr$bests
+```
+
+\normalsize
+
+### Model Fitting (continue)
+
+\scriptsize
+```{r, message=FALSE, warning=FALSE}
+set.seed(578)
+library(tsDyn)
+Model.rcpp <- setar(x = ts(FirstDiff.rcpp[,2]),
+                    d = 1, steps = 1, mH = 7, mL = 6,
+                    thDelay = 0, th = -495)
+pred.rcpp <- as.numeric(predict(Model.rcpp)) + rcpp.dwn[nrow(rcpp.dwn),2]
+
+Model.ggplot2 <- setar(x = ts(FirstDiff.ggplot2[,2]),
+                       d = 1, steps = 1, mH = 7, mL = 6,
+                       thDelay = 0, th = 235)
+pred.ggplot2 <- as.numeric(predict(Model.ggplot2)) + ggplot2.dwn[nrow(ggplot2.dwn),2]
+
+Model.dplyr <- setar(x = ts(FirstDiff.dplyr[,2]),
+                     d = 1, steps = 1, mH = 6, mL = 7,
+                     thDelay = 0, th = 159)
+pred.dplyr <- as.numeric(predict(Model.dplyr)) + dplyr.dwn[nrow(dplyr.dwn),2]
+
+Model.stringr <- setar(x = ts(FirstDiff.stringr[,2]),
+                       d = 1, steps = 1, mH = 7, mL = 6,
+                       thDelay = 0, th = -433)
+pred.stringr <- as.numeric(predict(Model.stringr)) + stringr.dwn[nrow(stringr.dwn),2]
+```
+
+\normalsize
+
+### Model Fitting (Plot of First Differenced Series Prediction)
+
+\scriptsize
+``````{r, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot() +
+  geom_line(data =  data.frame(Model.rcpp$fitted.values),
+            mapping = aes(x = 8:nrow(FirstDiff.rcpp),
+                          y = Model.rcpp.fitted.values,
+                          colour = "rcpp")) +
+  xlab("Time") + ylab("First Differenced Series") +
+  ggtitle("First Differenced Series Predicted Values") +
+  geom_line(data =  data.frame(Model.ggplot2$fitted.values),
+            mapping = aes(x = 8:nrow(FirstDiff.rcpp),
+                          y = Model.ggplot2.fitted.values,
+                          colour = "ggplot2")) +
+  geom_line(data =  data.frame(Model.dplyr$fitted.values),
+            mapping = aes(x = 8:nrow(FirstDiff.dplyr),
+                          y = Model.dplyr.fitted.values,
+                          colour = "dplyr")) +
+  geom_line(data =  data.frame(Model.stringr$fitted.values),
+            mapping = aes(x = 8:nrow(FirstDiff.rcpp),
+                          y = Model.stringr.fitted.values,
+                          colour = "stringr")) +
+  labs(colour = "Package")
+```
+
+\normalsize
+
+### Model Fitting (Plot of Download Count Prediction)
+
+\scriptsize
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+rcpp.pred <- data.frame(as.vector(Model.rcpp$fitted.values) + as.vector(rcpp.dwn[8:697,2]))
+names(rcpp.pred) <- "count"
+ggplot2.pred <- data.frame(as.vector(Model.ggplot2$fitted.values) + as.vector(ggplot2.dwn[8:697,2]))
+names(ggplot2.pred) <- "count"
+dplyr.pred <- data.frame(as.vector(Model.dplyr$fitted.values) + as.vector(dplyr.dwn[8:697,2]))
+names(dplyr.pred) <- "count"
+stringr.pred <- data.frame(as.vector(Model.stringr$fitted.values) + as.vector(stringr.dwn[8:697,2]))
+names(stringr.pred) <- "count"
+
+ggplot() +
+  geom_line(data = rcpp.pred,
+            mapping = aes(x = 1:nrow(rcpp.pred),
+                          y = rcpp.pred$count,
+                          colour = "rcpp")) +
+  geom_line(data = ggplot2.pred,
+            mapping = aes(x = 1:nrow(ggplot2.pred),
+                          y = ggplot2.pred$count,
+                          colour = "ggplot2")) +
+  geom_line(data = dplyr.pred,
+            mapping = aes(x = 1:nrow(dplyr.pred),
+                          y = dplyr.pred$count,
+                          colour = "dplyr")) +
+  geom_line(data = stringr.pred,
+            mapping = aes(x = 1:nrow(stringr.pred),
+                          y = stringr.pred$count,
+                          colour = "stringr")) +
+  geom_hline(yintercept = 0, linetype = 1) +
+  xlab("Time") +
+  ylab("Predicted Time Series") +
+  ggtitle("Download Count Prediction") +
+  labs(colour = "Package")
+```
+
+\normalsize
+
+### Next Point Prediction
+
+The plots in the last two pages are plots of first differenced series and the real download count predictions, respectively. We obtain the real download count prediction by adding our first differenced series to the original corresponding observions.
+
+\scriptsize
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+kable(data.frame(pred.rcpp, pred.ggplot2, pred.dplyr, pred.stringr),
+      align = "c",
+      caption = "Prediction of SETAR")
+```
+
+\normalsize
+
+The above table tells us the real download count prediction of the next day.

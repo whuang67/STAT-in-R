@@ -1,0 +1,189 @@
+---
+title: "Weather Project, STAT 578"
+shorttitle: "Weather Project, STAT 578"
+author: "Yukun Zhang, Wenke Huang, Yubai Yuan"
+institution: "University of Illinois at Urbana-Champaign"
+date: "November 2016"
+fontsize: 9pt
+section-titles: false
+output: 
+   uiucthemes::uiuc_beamer:
+     latex_engine: xelatex
+---
+
+# Weather Project
+## Weather Project
+### Introduction
+
+This project aims to use any given information from the seven cities to predict the maximum, minimum and mean temparature of city A.
+
+First we visualize the whole data set to make us have a better understanding of this time series. It is pretty obvious that this time series has 12 seasons from 2005 to 2016 which are also 12 years in total. Hence, based on the experience of living in the real world, we think that 365 days should be a good choice of the `season` parameter of this weather time series.
+
+### Introduction
+
+\scriptsize
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+set.seed(578)
+library("dplyr")
+base_url = "https://rstudio.stat.illinois.edu/"
+project = "weather-proj/dailies/"
+data_loc = "weather.rda"
+url = paste0(base_url, project, data_loc)
+download.file(url = url, destfile = "weather.rda")
+
+load("weather.rda")
+
+library(ggplot2)
+attach(weather)
+city_a = weather[city_id == "A",]
+detach(weather)
+
+ggplot() +
+  geom_line(data = city_a,
+            mapping = aes(x = Date,
+                          y = Max_TemperatureF,
+                          colour = "Max_TemperatureF")) +
+  geom_line(data = city_a,
+            mapping = aes(x = Date,
+                          y = Min_TemperatureF,
+                          colour = "Min_TemperatureF")) +
+  geom_line(data = city_a,
+            mapping = aes(x = Date, 
+                          y = Mean_TemperatureF,
+                          colour = "Mean_TemperatureF")) +
+  labs(colour = "Actual Temperature") +
+  xlab("Date") +
+  ylab("Temperature") +
+  ggtitle("Original Data of City A")
+```
+
+\normalsize
+
+### Model Fitting
+
+Here, we decide to use the variables of city a only to make our prediction. Based on it, we generate our new subset.
+
+\scriptsize
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+city_a_sl = weather[weather$city_id=='A', c(2,4,5,7,8,10,11,13,14,15)]
+names(city_a_sl)
+```
+
+\normalsize
+
+We can find out that we do have many weather related variables. All of these seven cities are hundreds of miles away from each other. We may think that using the previous temperatures of other cities to predict the future temperature of city A may not be a very good idea. The distances are really far.
+
+### Model Fitting (continue)
+
+What's more, we also notice that we only have the maximum and mean value of wind speed (MPH) in this data set, and minimum of wind speed (MPH) is missing. However, when we tried to calculate the minimum value of wind speed (MPH) manually, we realize that some of values are zero or negative which is against the basic definition of vector in mathematics. So we replace it with the Geometric Mean formula.
+
+$Min.Speed = \displaystyle\frac{Mean.Speed^2}{Max.Speed}$
+
+### Model Fitting (continue)
+
+We use function `vars::VARselect` to search the best lagorder here. The highest lag order we try is set to be `10`, and `AIC` is the metric here. The selection result is shown below. We can learn that `4` is our best choice.
+
+Next, we fit the model and make the prediction of the next point based on the information we just got from the previous sections. Mean value of the Temperature will not be predicted, and it will be calculated as the mean value of the maximum and minimum value of the same day.
+
+$Mean.temp = \displaystyle\frac{Max.temp + Min.temp}{2}$.
+
+\scriptsize
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+attach(weather)
+city_a_sl$Min_Wind_SpeedMPH <- weather[city_id=="A",12]^2/ +
+  city_a_sl$Max_Wind_SpeedMPH
+```
+
+\normalsize
+
+### Model Fitting (continue)
+
+\scriptsize
+```{r, message=FALSE, warning=FALSE, cache=TRUE}
+vars::VARselect(y = city_a_sl, lag.max = 10, type ="both", season = 365)$selection
+```
+
+\normalsize
+
+\scriptsize
+```{r, message=FALSE, warning=FALSE}
+model.Fit3 <- vars::VAR(y = city_a_sl,  p = 4, season = 365)
+pred <-  predict(model.Fit3, n.ahead=1)
+pred.A.Max2 <- pred$fcst$Max_TemperatureF[1,1]
+pred.A.Min2 <- pred$fcst$Min_TemperatureF[1,1]
+pred.A.Mean2 <- base::mean(c(pred.A.Max2, pred.A.Min2))
+```
+
+\normalsize
+
+In this model, `season` is set to be 365. We first find out our best lag order, and then fit the model based on them, just like the first model. Then we make the prediction based on this model.
+
+### Model Fitting (Plots of Max_TemperatureF)
+
+\scriptsize
+```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+par(mar = c(1,1,1,1))
+plot(model.Fit3, names = "Max_TemperatureF")
+```
+
+\normalsize
+
+### Second Model (Plots of Min_TemperatureF)
+
+\scriptsize
+```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+par(mar = c(1,1,1,1))
+plot(model.Fit3, names = "Min_TemperatureF")
+```
+
+\normalsize
+
+### Second Model (Plots of Overall Prediction)
+
+\scriptsize
+```{r, echo=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+VAR.Prediction <- data.frame(
+  fitted.values(model.Fit3)[, 1],
+    (fitted.values(model.Fit3)[, 1]+fitted.values(model.Fit3)[, 2])/2,
+  fitted.values(model.Fit3)[, 2]
+)
+names(VAR.Prediction) <- c("Max_TemperatureF",
+                           "Mean_TemperatureF",
+                           "Min_TemperatureF")
+ggplot() +
+  geom_line(data = VAR.Prediction,
+            mapping = aes(x = 1:nrow(VAR.Prediction),
+                          y = Max_TemperatureF,
+                          colour = "Max_TemperatureF")) +
+  geom_line(data = VAR.Prediction,
+            mapping = aes(x = 1:nrow(VAR.Prediction),
+                          y = Mean_TemperatureF,
+                          colour = "Mean_TemperatureF")) +
+  geom_line(data = VAR.Prediction,
+            mapping = aes(x = 1:nrow(VAR.Prediction),
+                          y = Min_TemperatureF,
+                          colour = "Min_TemperatureF")) +
+  labs(colour = "Predicted Temperature") +
+  xlab("Date") +
+  ylab("Temperature") +
+  ggtitle("Fitted Data of City A")
+```
+
+\normalsize
+
+### Prediction
+
+The plots shown in the previous two pages are plots of predicted values of maximum and minimun of a day of city A including the corresponding residuals, ACF and PACF. Basically we do not see there is some problems with the plots.
+
+\scriptsize
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+detach(weather)
+library(knitr)
+kable(data.frame(pred.A.Max2, pred.A.Min2, pred.A.Mean2),
+      align = "c",
+      caption = "Results of Second Model")
+```
+
+\normalsize
+
+The above table tells us the maximum, minimun and mean prediction of temperature of the next day.
