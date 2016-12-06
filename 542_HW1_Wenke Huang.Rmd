@@ -1,0 +1,411 @@
+---
+title: "HW1 Report for STAT 542"
+author: "Wenke Huang, September 9, 2016"
+output: 
+  pdf_document: 
+    fig_height: 3.75
+    fig_width: 5.1
+header-includes: \usepackage{amsmath}
+fontsize: 12pt
+---
+
+# Question 1
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+library(ElemStatLearn)
+rawTrain <- data.frame(zip.train)
+rawTest <- data.frame(zip.test)
+zipTrain <- rawTrain[which(rawTrain$X1 == 2 | rawTrain$X1 ==3),]
+zipTest<- rawTest[which(rawTest$X1 == 2 | rawTest$X1 ==3),]
+
+zipTrain$X1 <- as.factor(zipTrain$X1)
+zipTest$X1 <- as.factor(zipTest$X1)
+
+getError <- function(actual, predicted){
+  mean(actual != predicted)
+} # function will help us calculate the error rate
+```
+
+## 1.a Cross-validation fitting
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+set.seed(542)
+library(e1071)
+library(caret)
+
+knnTrain.1a <- train(
+  X1 ~ ., 
+  data = zipTrain,
+  method = "knn",
+  trControl = trainControl(method= "cv",number = 10),
+  tuneGrid = expand.grid(k = seq(1, 15, by =1))
+)
+
+k.1a <- knnTrain.1a$bestTune # k which we choose
+TestError.1a <- getError(zipTest[,1], predict(knnTrain.1a, newdata = zipTest))
+```
+
+Here we use the 10-fold Cross-Validation to find the best K value based on training dataset only. After calculating, the overall result is shown below numerically and as a plot.
+
+```{r,echo=FALSE}
+CVError.1a <- 1-knnTrain.1a$results$Accuracy
+t(data.frame(CVError.1a))
+
+plot(c(1, 15),
+     c(min(1-knnTrain.1a$results$Accuracy), max(1-knnTrain.1a$results$Accuracy)),
+     type = "n",
+     main = "Different K and corresponding CV Error",
+     xlab = "K",
+     ylab = "CV Error")
+points(1:15,
+       1-knnTrain.1a$results$Accuracy,
+       type = "b",
+       col="red")
+legend("bottomright", lty=1, col="red", legend="CV Error")
+```
+
+We will choose the K with the smallest CV Error. So the best K value we can get in this situation is `r k.1a` and its Cross-Validation Error is `r 1-knnTrain.1a$results$Accuracy[as.numeric(k.1a)]`.
+
+## 1.b Normal method fitting
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+set.seed(542)
+library(kknn)
+
+TestError.1b <- rep(0,15)
+for (i in 1:15){
+  knnTrain.1b <- kknn(
+    X1 ~ .,
+    train = zipTrain,
+    test = zipTest,
+    k = i,
+    kernel = "rectangular"
+  )
+  TestError.1b[i] <- getError(zipTest[,1], knnTrain.1b$fitted.values)
+}
+
+TrainError.1b <- rep(0,15)
+for (i in 1:15){
+  knnTrain.1bTrain <- kknn(
+    X1 ~ .,
+    train = zipTrain,
+    test = zipTrain,
+    k = i,
+    kernel = "rectangular"
+  )
+  TrainError.1b[i] <- getError(zipTrain[,1], knnTrain.1bTrain$fitted.values)
+}
+
+k.1b <- which.min(TestError.1b) # k which we choose
+```
+
+Here we use the training dataset to fit different Ks and use testing dataset to do the test and find the best K. After calculating, the overall result is shown below numerically and as a plot.
+
+```{r,echo=FALSE}
+ # training error
+t(data.frame(TrainError.1b))
+ # test error
+t(data.frame(TestError.1b))
+
+plot(c(1,15),
+     c(min(cbind(TestError.1b, TrainError.1b)), max(cbind(TestError.1b, TrainError.1b))+0.01),
+     type = "n",
+     main = "Different K and corresponding Test Error",
+     xlab = "K",
+     ylab ="Test Error")
+points(1:15,
+       TestError.1b,
+       type = "b",
+       col="blue")
+points(1:15,
+       TrainError.1b,
+       type = "b",
+       col="red")
+legend("topright", lty=rep(1,2), col=c("red", "blue"), legend=c("Train Error", "Test Error"))
+```
+
+We will choose the K with the smallest test error. If test errors of different Ks are the same, we will choose the largest K, the model of which will have a greatest degrees of freedom than the others. So the best K value we can get in this situation is `r k.1b` and its Test Error is `r TestError.1b[k.1b]`.
+
+## 1.c Comparation and conclusion
+
+When we use Cross-Validation, we will fit and test 10 times and calculate their mean value each time we choose a different K. More times of fitting and testing will definitely make the output more reliable. However, if we use the second method, we only fit one model and then test its error each time we choose a different K, which is obviously less dependable and easily affected by particular points. 
+
+|    Model   |  CV (K=`r k.1a`) | Normal method (K=`r k.1b`) |
+|:----------:|:----------------:|:--------------------------:|
+| Test Error | `r TestError.1a` |   `r TestError.1b[k.1b]`   |
+
+We can also test the first model by using the test dataset like the second model. Even though we can find that the test error of first model is a little larger than the second one, I think this difference could be allowed to exist.
+
+In conclusion, using Cross-Validation to select the best K value is my preference. In this case, I will choose `r k.1a` as my best K value and use it for further analysis.
+
+# Question 2
+
+## 2.a Derive degrees of freedom
+
+Based on the definition of k-nearest neighbor, we can find that covariance between $\hat{y_i}$ and $y_i$ should be $n/k$. Because only the nearest point will be considered as its predicted value while the rest points are all noncorrelated.
+
+degrees of freedom
+$= \sum_{i=1}^{n} Cov(\hat{y_i}, y_i)/\sigma^2
+ = \sum_{i=1}^{n} \frac{\sigma^2}{k} \times \frac{1}{\sigma^2}
+ = \sum_{i-1}^{n} \frac{1}{k}
+ = \frac{n}{k}$
+
+In this case, we know that k = 5. So degrees of freedom will be $n/5$.
+
+## 2.b Generate features X
+
+In this and following 2 parts, we will only output the first 5 rows of each matrix or vector that we generate because the data are too large. The whole data will still be saved in the original R code. Part of $X$ (200*4) we generate is shown below.
+
+```{r, echo=FALSE}
+set.seed(542)
+n = 200
+X1 <- rnorm(n, mean = 0, sd = 1)
+X2 <- rnorm(n, mean = 0, sd = 1)
+X3 <- rnorm(n, mean = 0, sd = 1)
+X4 <- rnorm(n, mean = 0, sd = 1)
+X <- data.frame(X1,X2,X3,X4)
+head(X, n=5L)
+```
+
+## 2.c Define the mean of Y
+
+We would like to define the mean of $Y$ as $E(Y) = f(X) = \frac{1}{4} \times (X_1 + X_2 + X_3 + X_4)$. Part of $f(X)$ value will be shown below.
+
+```{r,echo=FALSE}
+Y_mean <- as.matrix(X) %*% rep(.25,4)
+E_Y <- head(Y_mean, n=5L)
+t(data.frame(E_Y))
+```
+
+## 2.d Generate response Y and then predict
+
+As required, we generate the response $Y$. The formula is $Y= E(Y) + \epsilon$ while $\epsilon$ is an independent standard normal noise $N(0,1)$. Then we use them to fit a 5-nearest neighbor model, and calculate fitted response values $\hat{Y}$. Part of $\hat{Y}$ will be shown below.
+
+```{r,echo=FALSE, echo=FALSE}
+set.seed(542)
+
+Y <- Y_mean + rnorm(n, mean = 0, sd = 1)
+knn_2d <- kknn(
+  Y ~ as.matrix(X),
+  train = data.frame(as.matrix(X), Y),
+  test = data.frame(as.matrix(X), Y),
+  k = 5,
+  kernel = "rectangular"
+)
+
+Y_est <- as.matrix(knn_2d$fitted.values)
+Y_Predicted <- head(Y_est, n=5L)
+t(data.frame(Y_Predicted))
+```
+
+## 2.e Repeat previous part and calculate degrees of freedom
+
+```{r, echo=FALSE}
+set.seed(541)
+Y.matrix <- matrix(data =NA, nrow=n, ncol=10)
+Y_est.matrix <- matrix(data =NA, nrow=n, ncol=10)
+for(i in 1:10)
+  {
+  Y.loop <- Y_mean + rnorm(n, mean = 0, sd = 1)
+  Y.matrix[,i] <- Y.loop
+  knn_2e <- kknn(Y.loop ~ as.matrix(X),
+                 train = data.frame(as.matrix(X), Y.loop),
+                 test = data.frame(as.matrix(X), Y.loop),
+                 k = 5,
+                 kernel = "rectangular")
+  Y_est.matrix[,i] <- knn_2e$fitted.values
+}
+
+df <- sum(diag(cov(t(Y.matrix), t(Y_est.matrix))))/1
+```
+
+We repeat the previous part 10 times, and calculate the corvariance between $y_i$ and $\hat{y_i}$. We also know that the response's variance $\sigma^2$ is 1 which is exactly the same with the variance of $\epsilon$. So, we can get that degrees of freedom should be `r df` based on the original formula provided by  `2.a`.
+
+## 2.f Comparation and conclusion
+
+```{r, echo=FALSE}
+Y.matrix_50 <- matrix(data =NA, nrow=n, ncol=50)
+Y_est.matrix_50 <- matrix(data =NA, nrow=n, ncol=50)
+for(i in 1:50)
+  {
+  Y.loop_50 <- Y_mean + rnorm(n, mean = 0, sd = 1)
+  Y.matrix_50[,i] <- Y.loop_50
+  knn_50 <- kknn(Y.loop_50 ~ as.matrix(X),
+                 train = data.frame(as.matrix(X), Y.loop_50),
+                 test = data.frame(as.matrix(X), Y.loop_50),
+                 k = 5,
+                 kernel = "rectangular")
+  Y_est.matrix_50[,i] <- knn_50$fitted.values
+}
+df_50 <- sum(diag(cov(t(Y.matrix_50), t(Y_est.matrix_50))))/1
+
+
+Y.matrix_100 <- matrix(data =NA, nrow=n, ncol=100)
+Y_est.matrix_100 <- matrix(data =NA, nrow=n, ncol=100)
+for(i in 1:100)
+  {
+  Y.loop_100 <- Y_mean + rnorm(n, mean = 0, sd = 1)
+  Y.matrix_100[,i] <- Y.loop_100
+  knn_100 <- kknn(Y.loop_100 ~ as.matrix(X),
+                  train = data.frame(as.matrix(X), Y.loop_100),
+                  test = data.frame(as.matrix(X), Y.loop_100),
+                  k = 5,
+                  kernel = "rectangular")
+  Y_est.matrix_100[,i] <- knn_100$fitted.values
+}
+df_100 <- sum(diag(cov(t(Y.matrix_100), t(Y_est.matrix_100))))/1
+```
+
+|    Repeat Times    |   10   |     50    |     100    | Theoretical DF |
+|:------------------:|:------:|:---------:|:----------:|:--------------:|
+| Degrees of Freedom | `r df` | `r df_50` | `r df_100` |    `r 200/5`   |
+
+The definition of degrees of freedom has been provided in `2.a`. Based on that formula and data, we can get that the degrees of freedom in this case should be `r df`, which is not far from the theoretical degrees of freedom `r n/5` (We can get it from $200/5$). 
+
+In this part, we also tried to repeat generating response values 50 and 100 times and then calculate their degrees of freedom by using the original formula. All results calculated in `Question 2` are shown in the above table. Based on it and basic theory of statistics, we can know that if we can repeat more and more, the degrees of freedom we will get should be closer and closer to the theoretical one.
+
+# Question 3
+
+## 3.1 Linear regression with all predictors
+
+In this case, variable `lpsa` is the response while standardlized value of rest variables are all predictors. First, we visualize all of predictors of training dataset. We can clearly find that many predictors are strongly correlated with others, such as `lcp` and `svi`, `gleason` and `pgg45`, which is definitely not a good sign. We should search a model which does not contain all of predictors in case of over-fitting. So we fit a linear model with all of the 8 predictors. The coefficients of this model are shown below.
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+set.seed(542)
+
+ # Standardlize the predictors like the example
+RawCancer <- prostate
+for (i in 1:(dim(prostate)[2]-2)){
+  RawCancer[,i] <- (RawCancer[,i]-mean(RawCancer[,i]))/sqrt(var(RawCancer[,i]))
+}
+
+ # Generate training and testing datasets
+trainCancer <- RawCancer[prostate$train == "TRUE",-10]
+testCancer <- RawCancer[prostate$train == "FALSE",-10]
+
+ # Visualize the training data
+library(PerformanceAnalytics)
+suppressWarnings(chart.Correlation(trainCancer[,cbind(1,2,3,4,5,6,7,8)],
+                                   col = "blue",
+                                   pch = "*",
+                                   main="Correlation Matrix Chart"))
+
+n <- nrow(trainCancer)
+p <- ncol(trainCancer)
+# Original Model
+OLSFit <- lm(lpsa ~ ., data=trainCancer)
+```
+
+Linear model with all predictors
+
+```{r, echo=FALSE}
+OLSFit$coefficients
+```
+
+## 3.2 Backward stepwise regresssion and subsets
+
+```{r, echo=FALSE, warning=FALSE}
+set.seed(542)
+library(leaps)
+RSSleaps <- regsubsets(as.matrix(trainCancer[,-p]),
+                       trainCancer[,p],
+                       nvmax=p-1)
+sumleaps <- summary(RSSleaps, matrix=TRUE)
+msize <- apply(sumleaps$which, 1, sum) # Model Size including Intercept
+
+Cp = sumleaps$rss/(summary(OLSFit)$sigma^2) + 2*msize - n
+AIC = n*log(sumleaps$rss/n) + 2*msize
+BIC = n*log(sumleaps$rss/n) + msize*log(n)
+
+scale <- function(x){ 
+  (x - min(x)) / (max(x) - min(x))
+} # function which will help us scale the Criteria
+
+scaled.Cp <- scale(Cp)
+scaled.AIC <- scale(AIC)
+scaled.BIC <- scale(BIC)
+
+plot(range(msize),
+     c(0, 1.1),
+     type="n",
+     main = "Model Size and Criteria (Cp, AIC, BIC)",
+     xlab="Model Size (including Intercept)",
+     ylab="Model Selection Criteria")
+points(msize, scaled.Cp, col="red", type="b")
+points(msize, scaled.AIC, col="blue", type="b")
+points(msize, scaled.BIC, col="green", type="b")
+legend("topright", lty=rep(1,3), col=c("red", "blue", "green"), legend=c("Cp", "AIC", "BIC"))
+```
+
+We use the backward stepwise regression to look for the its subsets. The maximum size of subsets should be set as `r p-1` so we will not ignore any possibly better results. In order to make the results more clear and readable, We use modified Cp, AIC and BIC which are scaled to [0,1] as model selection criteria here. The plot shown above tells us that when best model sizes (including Intercept) will be 8 when we use Cp or AIC and 3 when we choose BIC. 
+
+Only knowing the model size is far less than being enough, we will retrieve and extract the predictors and their coefficients of the best models generated by different criteria. These procedures will make our conclusion more quantitively reliable and dependable .
+
+Model genereted by `Cp`
+
+```{r, echo=FALSE}
+set.seed(542)
+getMSE <- function(actual, predicted){
+  mean((actual -predicted)^2)
+}
+
+ # Cp
+varCp <- sumleaps$which[order(scaled.Cp)[1],]
+
+CpFit <- train(trainCancer[,names(trainCancer)[-9][varCp[-1]]],
+               trainCancer[,9],
+               method = "lm",
+               trControl = trainControl(method="none")) # fit model
+CpFit$finalModel$coefficients
+CpMSE.train <- getMSE(trainCancer[,9], predict(CpFit, trainCancer))
+CpMSE.test <- getMSE(testCancer[,9], predict(CpFit, testCancer))
+```
+
+Model genereted by `AIC`
+
+```{r, echo=FALSE}
+ # AIC
+varAIC <- sumleaps$which[order(scaled.AIC)[1],]
+
+AICFit <- train(trainCancer[,names(trainCancer)[-9][varAIC[-1]]],
+                trainCancer[,9],
+                method = "lm",
+                trControl = trainControl(method="none")) # fit model suggestted by Cp
+AICFit$finalModel$coefficients
+AICMSE.train <- getMSE(trainCancer[,9], predict(AICFit, trainCancer))
+AICMSE.test <- getMSE(testCancer[,9], predict(AICFit, testCancer))
+```
+
+Model genereted by `BIC`
+
+```{r, echo=FALSE}
+ # BIC
+varBIC <- sumleaps$which[order(scaled.BIC)[1],]
+
+BICFit <- train(trainCancer[,names(trainCancer)[-9][varBIC[-1]]],
+                trainCancer[,9],
+                method = "lm",
+                trControl = trainControl(method="none")) # fit model suggestted by Cp
+BICFit$finalModel$coefficients
+BICMSE.train <- getMSE(trainCancer[,9], predict(BICFit, trainCancer))
+BICMSE.test <- getMSE(testCancer[,9], predict(BICFit, testCancer))
+
+ # Linear Regression
+OLSMSE.train <- getMSE(trainCancer[,9], predict(OLSFit, trainCancer))
+OLSMSE.test <- getMSE(testCancer[,9], predict(OLSFit, testCancer))
+```
+
+We can also find that the result generated by Cp and AIC are exactly the same. 
+
+## 3.3 Comparation and conclusion
+
+|  Criteria |        Cp       |        AIC       |        BIC       | Linear Regression |
+|:---------:|:---------------:|:----------------:|:----------------:|:-----------------:|
+| Train MSE | `r CpMSE.train` | `r AICMSE.train` | `r BICMSE.train` |  `r OLSMSE.train` |
+|  Test MSE |  `r CpMSE.test` |  `r AICMSE.test` |  `r BICMSE.test` |  `r OLSMSE.test`  |
+
+We calculate train and test MSEs of the subsets and full model. We can find out that the test MSE of model `FITBIC` is the smallest from the above table, which should be considered the best under this circumstance. In this situation, I suggest that we choose model `BICFit` while its predictors and coefficients will be following.
+
+```{r, echo=FALSE}
+BICFit$finalModel$coefficients
+```

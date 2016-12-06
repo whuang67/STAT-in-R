@@ -1,0 +1,377 @@
+---
+title: "HW2 STAT542"
+author: "Wenke Huang"
+output:
+  pdf_document:
+    fig_height: 3.75
+    fig_width: 5
+fontsize: 12pt
+---
+
+# Question 1
+
+## 1.1 Prepare the dataset
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+hour <- read.csv("hour.csv", header=TRUE)
+hour$dteday <- as.Date(hour$dteday, format="%m/%d/%Y")
+hour$day <- as.factor(format(hour$dteday, "%d"))
+hour$yr <- as.factor(hour$yr)
+hour$mnth <- as.factor(hour$mnth)
+hour$season <- as.factor(hour$season)
+hour$holiday <- as.factor(hour$holiday)
+hour$hr <- as.factor(hour$hr)
+hour$weathersit <- as.factor(hour$weathersit)
+
+
+hour$weekend <- rep(0, dim(hour)[1])
+for(i in 1:dim(hour)[1]){
+  if(hour$weekday[i] == 0 || hour$weekday[i] == 6){
+    hour$weekend[i] = 1
+  }
+}
+hour$weekend <- as.factor(hour$weekend)
+
+hourFirst <- hour[,cbind(3,4,5,6,7,10,11,12,13,14,15,16,17,18,19,20)]
+
+library(Matrix)
+hourSecond <- sparse.model.matrix(cnt ~ .-1-train, data=hourFirst)
+hourSecond <- data.frame(as.matrix(hourSecond[,-1]))
+
+hourTrain <- hourSecond[hourFirst$train == "TRUE", ] # Column numbers will be new numbers
+hourTest <- hourSecond[hourFirst$train == "FALSE", ]
+
+ # Here we scale the predictors but not the response, because the response will be scaled automatically 
+
+hourTrain.predictors <- as.matrix(hourTrain)
+hourTrain.cnt <- as.matrix(log(hour[hourFirst$train == "TRUE", ]$cnt+1))
+hourTest.predictors <- as.matrix(hourTest)
+hourTest.cnt <- as.matrix(log(hour[hourFirst$train == "FALSE", ]$cnt+1))
+
+getRMSE <- function(actual, predicted){
+  sqrt(mean((actual - predicted)^2))
+}
+```
+
+First, we consider seasonal patterns. We generate a new variable `weekend` which tells us whether a day is weekend. `weekend` and `holiday` together can give us the effect of weekend, holiday and their combo. What's more, we will also extract a new variable called `day` from variable `dteday`. We can find that variables `weekday` `workingday`, `instant` and `dteday` can be dropped because the other seasonal variables have contain the informations that these tell us.
+
+Second, we discuss historical patterns. We notice that values of `casual` plus values of `registered` will be exactly the same as values of `cnt`, and the definition of `cnt` tells us the same story. In this case, we consider $log(cnt+1)$ to be a continuous variable even though $cnt$ is an discrete integer one. Thus, we treat $log(cnt+1)$ as the response directly. At the same time, the LOG transformation can also solve our problem of multicollinearity.
+
+Last, we convert some variables into factor ones. All of the predictors in this case and their corresponding variable type are shown below.
+
+| Predictors | season | yr | mnth | hr | holiday |
+|:----------:|:----------:|:-------:|:-------:|:----------:|:---------:|
+| Type | factor | factor | factor | factor | factor |
+
+| Predictors | weathersit | temp | atemp | hum | windspeed |
+|:----------:|:----------:|:-------:|:-------:|:----------:|:---------:|
+| Type | factor | numeric | numeric | numeric | numeric |
+
+| Predictors | day | weekend | casual | registered |  |
+|:----------:|:----------:|:-------:|:-------:|:----------:|:---------:|
+| Type | factor | factor | numeric | numeric |  |
+
+## 1.2 Models Fitting
+
+In this part, we will use several methods to fit models to predict the total counts of bike rental. Some of them may contain tuning parameters, which means we may fit a bunch of models when trying one method. Here, we will only use the train dataset to fit the models, and only use the test dataset to calculate RMSE $= \sqrt{\frac{1}{n} \sum_{i=1}^{n} (log(\hat{y_i}-1) - log(y_i-1))^2}$. The model with the smallest RMSE of one particular method will be considered the best model of this method in this case.
+
+### 1.2.1 Linear regression
+
+```{r, echo=FALSE}
+set.seed(542)
+hourTrain.ols <- data.frame(cbind(hourTrain.predictors, hourTrain.cnt))
+names(hourTrain.ols)[ncol(hourTrain.ols)] <- "cnt"
+hourTest.ols <- data.frame(cbind(hourTest.predictors, hourTest.cnt))
+names(hourTest.ols)[ncol(hourTest.ols)] <- "cnt"
+
+ols1 <- lm(cnt ~., data = hourTrain.ols)
+RMSE.ols <- getRMSE(hourTest.cnt, predict(ols1, newdata =  hourTest.ols))
+RMSE.ols.train <- getRMSE(hourTrain.cnt, predict(ols1, newdata = hourTrain.ols))
+```
+
+At the very beginning, we fit a linear regression model which contains all possible predictors we have chosen in the previous part. We get the coefficients $\hat{\beta}^{ols}$ from the function $\hat{\beta}^{ols} = (\mathbf{X}^T\mathbf{X})^{-1}\mathbf{X}^T\mathbf{y}$. By the Gauss-Markov Theorem, we know that this estimation is the best linear unbiased estimator (BLUE).
+
+After calculating, we get the training and testing RMSE of linear regression are `r RMSE.ols.train` and `r RMSE.ols`, respectively.
+
+### 1.2.2 RIDGE regression
+
+```{r, echo=FALSE}
+dof2lambda <- function(d, dof) {
+  obj <- function(lam, dof) (dof - sum(d ^ 2 / (d ^ 2 + lam))) ^ 2
+  sapply(dof, function(x) optimize(obj, c(0, 1e4), x)$minimum)
+}
+
+p <- ncol(hourTrain.predictors)
+d <- svd(hourTrain.predictors)$d
+dof <- seq(0, p, 0.1)
+lam <- dof2lambda(d, dof)
+```
+
+Ridge regression penalize the coefficients $\hat{\beta}^{ridge}$ from the function $\hat{\beta}^{ridge} = \text{arg }\underset{\beta}{\operatorname{min}} ||\mathbf{y} - \mathbf{X}\beta||^2 + \lambda ||\beta||^2$ while at the same time $\hat{\beta}^{ridge}$ is still a linear estimator just like ridge regression (Degrees of freedom $= \sum_{i=1}^{p}\frac{d_j^2} {d_j^2 + \lambda}$, and we can find that degrees of freedom and $\lambda$ are negative correlated).
+
+Unlike linear regression, $\hat{\beta}^{ridge}$ is not an unbiased estimator. Based on the function of ridge regression, we can find that it will not zero out the coefficients, which means that this method will only do coefficients shrinkage.
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+set.seed(542)
+library(glmnet)
+ridge1 <- glmnet(hourTrain.predictors, 
+                 hourTrain.cnt,
+                 alpha = 0,
+                 standardize = FALSE,
+                 lambda = lam/dim(hourTrain.predictors)[1])
+
+
+plot(ridge1, xvar = "lambda", xlab = "tuning parameters", label=FALSE,cex.lab=0.8)
+abline(h = 0, lty = 3)
+title("Figure 1.1: Ridge Regression", cex.main = 0.8)
+
+
+RMSE.ridge1 <- rep(0, dim(data.frame(ridge1$lambda))[1])
+
+for(i in 1:dim(data.frame(ridge1$lambda))[1]){
+  predictedTest.lasso <- predict(ridge1, 
+                                 newx = hourTest.predictors,
+                                 type = "response",
+                                 s = ridge1$lambda[i])
+  RMSE.ridge1[i] <- getRMSE(hourTest.cnt, predictedTest.lasso)
+}
+
+RMSE.ridge <- RMSE.ridge1[which.min(RMSE.ridge1)]
+lambda.ridge <- ridge1$lambda[which.min(RMSE.ridge1)]*nrow(hourTrain.predictors)[1]
+dof.ridge <- dof[which.min(RMSE.ridge1)]
+
+RMSE.ridge.train <- getRMSE(hourTrain.cnt, predict(ridge1,
+                                                   newx = hourTrain.predictors,
+                                                   type = "response",
+                                                   s = ridge1$lambda[which.min(RMSE.ridge1)]))
+```
+
+The graph shown above tells us the relationship among all of the coefficients and its corresponding dtuning parameter. The value of tuning parameter $= log(\lambda/8691)$. When $\lambda$ is going larger, $\hat{\beta}^{ridge}$ goes towards 0 at the same time.
+
+After calculating, we get the training and testing RMSEs are `r RMSE.ridge.train` and `r RMSE.ridge`, respectively, while its corresonding $\lambda$ is `r lambda.ridge` (degrees of freedom is `r dof.ridge`).
+
+### 1.2.3 LASSO
+
+LASSO penalize the coefficient $\hat{\beta}^{lasso}$ from the function $\hat{\beta}^{lasso} = \text{arg }\underset{\beta}{\operatorname{min}} ||\mathbf{y} - \mathbf{X}\beta||^2 + \lambda ||\beta||$ while at the same time $\hat{\beta}^{lasso}$ is still a linear estimator.
+
+Like ridge regression, $\hat{\beta}^{lasso}$ is a biased estimator. Based on the function of LASSO, we can find that it may zero out the coefficients. It illustrates that this method will do coefficients shrinkage and variable selection at the same time, which is different from ridge regression.
+
+```{r, echo=FALSE}
+set.seed(542)
+lasso1 <- glmnet(hourTrain.predictors, 
+                 hourTrain.cnt,
+                 alpha = 1,
+                 standardize = FALSE,
+                 lambda = lam/dim(hourTrain.predictors)[1])
+
+plot(lasso1, xvar = "lambda", xlab = "tuning parameters", label=FALSE,cex.lab=0.8)
+abline(h = 0)
+title("Figure 1.2: LASSO Regression", cex.main = 0.8)
+
+RMSE.lasso1 <- rep(0, dim(data.frame(lasso1$lambda))[1])
+
+for(i in 1:dim(data.frame(lasso1$lambda))[1]){
+  predictedTest <- predict(lasso1, 
+                           newx = hourTest.predictors,
+                           type = "response",
+                           s = ridge1$lambda[i])
+  RMSE.lasso1[i] <- getRMSE(hourTest.cnt, predictedTest)
+}
+
+RMSE.lasso <- RMSE.lasso1[which.min(RMSE.lasso1)]
+lambda.lasso <- lasso1$lambda[which.min(RMSE.lasso1)]*nrow(hourTrain.predictors)[1]
+
+RMSE.lasso.train <- getRMSE(hourTrain.cnt, predict(lasso1,
+                                                   newx = hourTrain.predictors,
+                                                   type = "response",
+                                                   s = lasso1$lambda[which.min(RMSE.lasso1)]))
+```
+
+The graph shown above tells us the relationship among all of the coefficients and their corresponding tuning parameter. The value of tuning parameter $= log(\lambda/8691)$. When $\lambda$ is going larger, $\hat{\beta}^{lasso}$ goes towards 0 at the same time. 
+
+Based on the graph shown above, we can clearly see that just like ridge regression above all of the coefficients are shrunk as the degrees of freedom is going towards zero ($\lambda$ is going larger at the same time). After calculating, we get the training and testing RMSEs are `r RMSE.lasso.train` and `r RMSE.lasso`, respectively, while its corresponding $\lambda$ is `r lambda.lasso`. 
+
+### 1.2.4 MCP
+
+MCP stands for Minimax Concave Penality which is an unbiased penality. It has exactly the same formulation of the penalized loss funtion which is $\frac{1}{2n} ||\mathbf{y}-\mathbf{X}\beta||^2 + \sum_{i=1}^{p}P(\beta_j)$. For some $\gamma > 1$, its penality term is defined as:
+
+$P(\beta)=\left\{
+ \begin{aligned}
+ \lambda |\beta| -\frac{\beta^2}{2\gamma}\text{, if } |\beta| \leq \gamma\lambda \\
+ \frac{1}{2} \gamma \lambda^2 \text{, if } |\beta| \geq \gamma\lambda \\
+ \end{aligned}
+ \right.$
+
+The maximum concavity of this penalty function is $1/ \gamma$, which is exactly controlled.
+
+```{r, echo=FALSE}
+set.seed(542)
+library(ncvreg)
+mcp1 <- ncvreg(hourTrain.predictors,
+               hourTrain.cnt,
+               penalty="MCP")
+
+RMSE.mcp1 <- rep(0, dim(data.frame(mcp1$lambda))[1])
+for (i in 1:dim(data.frame(mcp1$lambda))[1]){
+  predictedTest <- predict(mcp1, 
+                           hourTest.predictors,
+                           type = "response",
+                           lambda = mcp1$lambda[i])
+  RMSE.mcp1[i] <- getRMSE(hourTest.cnt, predictedTest)
+}
+
+plot(mcp1, lwd=0.8 , ylab = "coefficients")
+abline(h = 0)
+title("Figure 1.3: MCP", cex.main = 0.8)
+
+lambda.mcp <- mcp1$lambda[which.min(RMSE.mcp1)]
+RMSE.mcp <- RMSE.mcp1[which.min(RMSE.mcp1)]
+RMSE.mcp.train <- getRMSE(hourTrain.cnt, predict(mcp1,
+                                                 hourTrain.predictors,
+                                                 type = "response",
+                                                 lambda = lambda.mcp))
+```
+
+The graph shown above tells us the relationship among all of the coefficients and their corresponding degrees of freedom. When $\lambda$ is going towards zero, $\hat{\beta}^{mcp}$ goes greater. When $\lambda$ is going greater, $\hat{\beta}^{lasso}$ goes towards 0.
+
+Here, we will only use default $\gamma$ and $\lambda$ to fit `MCP` models. After calculating, we get the training and testing RMSEs are `r RMSE.mcp.train` and `r RMSE.mcp`, respectively, while its corresponding $\lambda$ is `r lambda.mcp`.  
+
+## 1.3 Summary
+
+| Model | Linear regression  | Ridge | LASSO | MCP |
+|:-------------:|:------------------:|:--------------------:|:--------------------:|:------------------:|
+| training RMSE | `r RMSE.ols.train` | `r RMSE.ridge.train` | `r RMSE.lasso.train` | `r RMSE.mcp.train` |
+| testing RMSE | `r RMSE.ols` | `r RMSE.ridge` | `r RMSE.lasso` | `r RMSE.mcp` |
+
+In this case, we tried four methods to fit our models, `Linear regression`, `ridge regression`, `LASSO` and `MCP`. `Linear regression` and `MCP` offer us an unbiased estimator while the rest two can make biased estimator. But being unbiased or not is not the standard that we use to find the best model.
+
+Here, we use testing RMSE to decide which method we used is the best. We summary the training and testing RMSE of the four methods that we have used in this part. This table is to make the results more clearly. We can find that all of the testing RMSE are pretty close to each other while `MCP` which is `r RMSE.mcp` is the smallest of all. We can believe that this method is neither over nor under fitting. At the same time, what `MCP` provides us is also an unbiased estimator. Hence, we think `MCP` should be the best model of this question.
+
+There are still some insufficient parts in this case. We can find that all of the tuning $\lambda$ that we use are very small here. It illustrates that all of shrinkage coefficients are still prettly close to the OLS coefficients, which can also explain why these RMSEs are almost equal to each other. Further, we may consider using cross-validation RMSE to find the best tuning parameter instead of test RMSE in each method.
+
+# Question 2
+
+## 2.1 Quadratic Discriminant Analysis
+
+```{r, echo=FALSE}
+set.seed(542)
+vowelTrain <- read.table("vowel.train.data")
+vowelTest <- read.table("vowel.test.data")
+
+level <- dim(as.matrix(levels(as.factor(vowelTrain[,1]))))[1]
+p <- dim(vowelTrain)[2]-1
+
+Mu <- matrix(data = 0, 
+             nrow = level, 
+             ncol= p)
+Sigma <- array(data = 0,
+               dim = c(p,p,level))
+logDet <- array(data = 0, 
+                dim = level)
+prior <- array(data=0, 
+               dim =level)
+
+for (i in 1:level){
+  Mu[i,] <- colMeans(vowelTrain[vowelTrain$y== i ,-1])
+  XminusMu <- scale(vowelTrain[vowelTrain$y== i ,-1], center=Mu[i,], scale=FALSE)
+  Sigma[,,i] <- t(XminusMu) %*% XminusMu / (dim(vowelTrain[vowelTrain$y== i ,-1])[1]-1)
+  logDet[i] <- log(det(Sigma[,,i]))
+  prior[i] <- dim(vowelTrain[vowelTrain$y== i ,-1])[1]/dim(vowelTrain)[1]
+}
+
+discriminant.train <- array(data=0, dim=c(dim(vowelTrain)[1], level))
+discriminant.train <- data.frame(discriminant.train)
+
+for (i in 1:level){
+  XminusMu.train <- as.matrix(vowelTrain[,-1] - matrix(Mu[i,], nrow = dim(vowelTrain)[1], ncol=p, byrow=TRUE))
+  FirstPart <- diag(XminusMu.train %*% solve(Sigma[,,i]) %*% t(XminusMu.train))
+  discriminant.train[,i] <- (- 0.5*FirstPart - 0.5*logDet[i] + log(prior[i]))
+  names(discriminant.train)[i] <- i
+}
+
+pred.QDA1.train <- rep(0,dim(vowelTrain)[1])
+for (i in 1:dim(vowelTrain)[1]){
+  pred.QDA1.train[i] <- which.max(discriminant.train[i,])
+}
+
+
+discriminant <- array(data=0, dim=c(dim(vowelTest)[1], level))
+discriminant <- data.frame(discriminant)
+
+for (i in 1:level){
+  XminusMu.test <- as.matrix(vowelTest[,-1] - matrix(Mu[i,], nrow = dim(vowelTest)[1], ncol=p, byrow=TRUE))
+  FirstPart <- diag(XminusMu.test %*% solve(Sigma[,,i]) %*% t(XminusMu.test))
+  discriminant[,i] <- (- 0.5*FirstPart - 0.5*logDet[i] + log(prior[i]))
+  names(discriminant)[i] <- i
+}
+
+pred.QDA1.test <- rep(0,dim(vowelTest)[1])
+for (i in 1:dim(vowelTest)[1]){
+  pred.QDA1.test[i] <- which.max(discriminant[i,])
+}
+```
+
+Quadratic Discriminant Function is based on the Bayes Theorem. We model each class density as multivariate Gaussian Distribution $f_k(x)$, and each covariance matrices are NOT the same accross all k. Here, $\mu_{k}$ is the group $k$ means. And $\Sigma_i = (\mathbf{x}_k-\mu_k) (\mathbf{x}_k-\mu_k)^{T}$, where $\Sigma$ is the covariance matrix of group $k$. $\pi_{k} = \frac{n_k}{n}$ is prior probability of the group $k$, where $n_k$ and $n$ are group observations numbers and total observation numbers, respectively.
+
+The best prediction is picking the one that maximizes the posterior $\pi_i f_i(x)$. In order to make it more convinent, we fit the discriminant function: $\delta_k(x) =- \frac{1}{2}log|\Sigma_k| - \frac{1}{2} (\mathbf{x} -\mu_{k})^{T}\Sigma_k^{-1}(\mathbf{x}-\mu_{k}) + log\pi_{k}$. The `y` will be classified in to group $i$ if $\delta_i(x)$ is the largest of all of the discriminant values.
+
+After calculating, we can obtain its training error is `r mean(vowelTrain$y != pred.QDA1.train)` which is extremely closed to 1. Just considering the training error is not enough because we just fit this model based on this training dataset. We also check the testing error which is `r mean(vowelTest[,1] != pred.QDA1.test)`.
+
+## 2.2 Further Models Fitting
+
+### 2.2.1 Linear Discriminant Function
+
+```{r, echo=FALSE, message=FALSE}
+ # LDA
+set.seed(542)
+library(MASS)
+fit.LDA <- lda(vowelTrain[,-1], vowelTrain[,1])
+pred.LDA.train <- predict(fit.LDA, vowelTrain[,-1])$class
+pred.LDA.test <- predict(fit.LDA, vowelTest[,-1])$class
+```
+
+
+Linear Discriminant Function is also based on the Bayes Theorem. We model each class density as multivariate Gaussian Distribution $f_k(x)$, and each covariance matrices are the same accross all k. Here, $\mu_{k}$ is the group $k$ means. And $\Sigma = (\mathbf{x}-\mu) (\mathbf{x}-\mu)^{T}$, where $\Sigma$ is the covariance matrix of every group. $\pi_{k} = \frac{n_k}{n}$ is prior probability of the group $k$, where $n_k$ and $n$ are group observations numbers and total observation numbers, respectively.
+
+Thus, the linear discriminant function we fit is $\delta_k(x) = \mathbf{x}^T \Sigma^{-1} \mu_k - \frac{1}{2} \mu_k^T \Sigma^{-1} \mu_k + log\pi_{k}$. The `y` will be classified in to group $i$ if $\delta_i(x)$ is the largest of all of the discriminant values, just like QDA.
+
+The package `MASS` of R has already generated function `lda` for us to use, which can save us valuable time. After calculating, we can obtain its training error is `r mean(vowelTrain$y != pred.LDA.train)` which is extremely closed to 1. Like previous part, just considering the training error is not enough. We also check the testing error which is `r mean(vowelTest[,1] != pred.LDA.test)`.
+
+### 2.2.3 re-fit QDA
+
+```{r, echo=FALSE}
+ # QDA
+fit.QDA <- qda(vowelTrain[,-1], vowelTrain[,1])
+pred.QDA.train <- predict(fit.QDA, vowelTrain[,-1])$class
+pred.QDA.test <- predict(fit.QDA, vowelTest[,-1])$class
+```
+
+We have talked about how QDA works in classification in the previous part. Here, we only attempt to fit a QDA model and predict from the `MASS` package. After calculating, we will know that its QDA training and testing errors are `r mean(vowelTrain$y != pred.QDA.train)` and `r mean(vowelTrain$y != pred.QDA.train)`, respectively. This gives us an opportunity to check the correctness of the previous part. However, we will not do it until the very end.
+
+### 2.2.3 Logistic regression
+
+```{r, echo=FALSE, message=FALSE}
+ # Logistic Regression
+library(nnet)
+fit.logistic <- multinom(y ~ ., data=vowelTrain, trace=FALSE)
+pred.logistic.train <- predict(fit.logistic, vowelTrain)
+pred.logistic.test <- predict(fit.logistic, vowelTest)
+```
+
+We will also try the method of Logistic regression. This method looks like the linear regression but they are not exactly the same. The basic function we use here is $log \frac{y}{1-y} = x^T \beta$ where $log \frac{y}{1-y}$ is called log-odds here and we model it as a linear function of $X$. We can also re-write the function as $y = \frac{exp(x^T \beta)}{1+exp(x^T \beta)}$.
+
+In this part, it is a multiomial logistic regression which has `r level` possible outcomes. We can just running `r level-1` independent binary logistic regression models. The ith funciton is like $log \frac{p(y=i)}{p(y=11)} = \mathbf{X} \beta$.
+
+Luckily, R has already provided us a function `multinom` in the `nnet` package. After calculating, we can get that its training error is `r mean(vowelTrain$y != pred.logistic.train)` and testing error is `r mean(vowelTest$y != pred.logistic.test)`.
+
+### 2.3 Summary
+
+| Model | LDA | QDA | Logistic regression | QDA (Part 2.1) |
+|:--------------:|:----------------------------------------:|:----------------------------------------:|:---------------------------------------------:|:-----------------------------------------:|
+| Train Error | `r mean(vowelTrain[,1]!=pred.LDA.train)` | `r mean(vowelTrain[,1]!=pred.QDA.train)` | `r mean(vowelTrain[,1]!=pred.logistic.train)` | `r mean(vowelTrain[,1]!=pred.QDA1.train)` |
+| Test Error | `r mean(vowelTest[,1]!=pred.LDA.test)` | `r mean(vowelTest[,1]!=pred.QDA.test)` | `r mean(vowelTest[,1]!=pred.logistic.test)` | `r mean(vowelTest[,1]!=pred.QDA1.test)` |
+
+We summary the train and test errors (including the previous part) of the methods that we have tried. This table is to make the results more clearly. We can find that the test error of `Logistic regression` is the lowest of these four which is `r mean(vowelTest[,1] != pred.logistic.test)`. We can believe that this method is neither over nor under fitting in this case. Here we think that `Logistic regression` should be considered the best model of this question.
+
+What's more, we can also find that the train and test errors of QDA without and with using package `MASS` are both `r mean(vowelTrain[,1] != pred.QDA1.train)` and `r mean(vowelTest[,1] != pred.QDA1.test)`, respectively. They match each other perfectly.
+

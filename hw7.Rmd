@@ -1,0 +1,332 @@
+---
+title: "Homework Seven"
+author: "STAT 430, Spring 2016"
+date: 'Due: Saturday, April 23 by 11:00 PM'
+output:
+  html_document:
+    theme: lumen
+    toc: yes
+    toc_float: yes
+    code_folding: show
+header-includes: \usepackage{amsmath}
+---
+
+
+\
+\
+\
+
+
+
+
+
+```{r}
+uin = 671105713
+```
+
+**Note:** When using SVMs it is suggested to use scaled data. However, we do not need to do this manually, as the methods implemented in `ksvm` do this automatically. 
+
+When plotting decision boundaries, you can simply call `plot()` on `ksvm` objects. (You will also need to give it the data unless you only want to plot the support vectors. See the notes for examples.)
+
+
+\
+\
+\
+
+
+
+
+
+# Assignment
+
+
+## Question 1 
+
+For this question, we will simulate data using the following function:
+
+```{r}
+simData <- function(n = 1000) {
+  x1 = runif(1000) - 0.5
+  x2 = runif(1000) - 0.5
+  y  = 1 * (x1 ^ 2 - x2 ^ 2 + rnorm(n, 0, 0.025) > 0)
+  data.frame(y = as.factor(y), x1, x2)
+}
+```
+
+We will call the function twice to create a test and train set. Set your seed before running the following two lines.
+
+```{r}
+set.seed(uin)
+trainData <- simData()
+testData <- simData()
+```
+
+```{r}
+getACC <- function(actual, predicted){
+  mean(actual==predicted)
+}
+```
+
+<br><br>
+**(a)** Plot the training data. Place $x_1$ on the $y$ axis and $x_2$ on the $x$ axis. (This will match the plots from `ksvm`.) Use a different color for different values of $y$. Is this data separable? Do you think a linear decision boundary will work well here?
+
+```{r}
+plot(trainData$x2, trainData$x1, col= ifelse(trainData$y =="1", "red", "green"), pch=20)
+```
+
+**(b)** Fit a SVM with a linear kernel to the training data. You may simply use the default tuning parameters. (You will only need to specify the kernel.) Plot the resulting decision boundary. Report a confusion matrix for the test data as well as the test accuracy.
+
+```{r, message=FALSE, warning=FALSE}
+set.seed(uin)
+library(kernlab)
+linSvmFit <- ksvm(y ~ ., data=trainData, kernel="vanilladot")
+plot(linSvmFit, data = trainData)
+linTestPred <- predict(linSvmFit, testData)
+table(linTestPred, testData$y)
+getACC(testData$y, linTestPred)
+```
+
+**(c)** Fit a SVM with a polynomial kernel to the training data. You may simply use the default tuning parameters other than degree. (You **will** need to specify degree. Use `kpar = list(degree = 2)`) Plot the resulting decision boundary. Report a confusion matrix for the test data as well as the test accuracy.
+
+```{r}
+set.seed(uin)
+polySvmFit <- ksvm(y ~ ., data=trainData, kernel="polydot", kpar=list(degree = 2))
+plot(polySvmFit, data = trainData)
+polyTestPred <- predict(polySvmFit, testData)
+table(polyTestPred, testData$y)
+getACC(testData$y, polyTestPred)
+```
+
+**(d)** Fit a SVM with a radial kernel to the training data. You may simply use the default tuning parameters. (You will only need to specify the kernel.) Plot the resulting decision boundary. Report a confusion matrix for the test data as well as the test accuracy.
+
+```{r}
+set.seed(uin)
+radSvmFit <- ksvm(y ~ ., data=trainData, kernel="rbfdot", kpar=list(sigma=0.25))
+plot(radSvmFit, data = trainData)
+radTestPred <- predict(radSvmFit, testData)
+table(radTestPred, testData$y)
+getACC(testData$y, radTestPred)
+```
+
+**(e)** Fit an additive logistic regression to the training data. Report a confusion matrix for the test data as well as the test accuracy.
+
+```{r}
+set.seed(uin)
+library(caret)
+glmSvmFit <- train(y ~ ., data=trainData,
+                   method = "glm",
+                   family="binomial")
+glmTestPred <- predict(glmSvmFit, testData)
+table(glmTestPred, testData$y)
+getACC(testData$y, glmTestPred)
+```
+
+**(f)** Fit another logistic regression to the training data, this time adding polynomial terms of degree two for each of the predictors. Report a confusion matrix for the test data as well as the test accuracy.
+
+```{r}
+set.seed(uin)
+library(caret)
+glmPolySvmFit <- train(y ~ .^2, data=trainData,
+                       method = "glm",
+                       family="binomial")
+glmPolyTestPred <- predict(glmPolySvmFit, testData)
+table(glmPolyTestPred, testData$y)
+getACC(testData$y, glmPolyTestPred)
+```
+
+**(g)** Summarize the accuracies above. Which method performed the best? 
+
+\
+\
+\
+
+
+
+
+
+
+
+## Question 2
+
+For this question we will return to the `OJ` data from the `ISLR` package. We will again attempt to predict the `Purchase` variable.
+
+**(a)** Test-Train split the data, using 800 observations for the training data.
+
+```{r}
+set.seed(uin)
+library(ISLR)
+OJindex <- sample(1:dim(OJ)[1],800)
+trainOJ <- OJ[OJindex,]
+testOJ <- OJ[-OJindex,]
+```
+
+**(b)** Tune a SVM with a linear kernel to the training data using 5-fold cross-validation. Use the following grid of values for `C`. Report the chosen values of any tuning parameters. Report a confusion matrix for the test data as well as the test accuracy.
+
+```{r}
+linGrid <-  expand.grid(C = c(2 ^ (-5:5)))
+```
+
+```{r}
+set.seed(uin)
+svmControl <- trainControl(method="cv", number=5, returnResamp="all",
+                           verbose=FALSE)
+linSvmFitOJ <- train(Purchase ~ ., data=trainOJ,
+                     method="svmLinear",
+                     trControl = svmControl,
+                     tuneGrid = linGrid)
+linSvmFitOJ$bestTune
+linSvmTestPredOJ <- predict(linSvmFitOJ, testOJ)
+table(linSvmTestPredOJ, testOJ$Purchase)
+getACC(testOJ$Purchase, linSvmTestPredOJ)
+```
+
+**(c)** Tune a SVM with a polynomial kernel to the training data using 5-fold cross-validation. Do not specify a tuning gird. (`caret` will create one for you.) Report the chosen values of any tuning parameters. Report a confusion matrix for the test data as well as the test accuracy.
+
+```{r}
+set.seed(uin)
+polySvmFitOJ <- train(Purchase ~., data=trainOJ,
+                      method="svmPoly",
+                      trControl = svmControl)
+polySvmFitOJ$bestTune
+polySvmTestPredOJ <- predict(polySvmFitOJ, testOJ)
+table(polySvmTestPredOJ, testOJ$Purchase)
+getACC(testOJ$Purchase, polySvmTestPredOJ)
+```
+
+**(d)** Tune a SVM with a radial kernel to the training data using 5-fold cross-validation. Use the following grid of values for `C` and `sigma`. Report the chosen values of any tuning parameters. Report a confusion matrix for the test data as well as the test accuracy.
+
+```{r}
+radGrid <-  expand.grid(C = c(2 ^ (-2:3)), sigma  = c(2 ^ (-3:1)))
+```
+
+```{r}
+set.seed(uin)
+radSvmFitOJ <- train(Purchase ~ ., data=trainOJ,
+                     method="svmRadial",
+                     trControl=svmControl,
+                     tuneGrid=radGrid)
+radSvmFitOJ$bestTune
+radSvmTestPredOJ <- predict(radSvmFitOJ, testOJ)
+table(radSvmTestPredOJ, testOJ$Purchase)
+getACC(testOJ$Purchase, radSvmTestPredOJ)
+```
+
+**(e)** Tune a random forest using 5-fold cross-validation. Report the chosen values of any tuning parameters. Report a confusion matrix for the test data as well as the test accuracy.
+
+```{r}
+rfGrid <- expand.grid(mtry= 1:(dim(OJ)[2]-1))
+```
+
+```{r,warning=FALSE}
+library(randomForest)
+set.seed(uin)
+rfFitOJ <- train(Purchase ~ ., data=trainOJ,
+                 method="rf",
+                 trControl=svmControl,
+                 tuneGrid=rfGrid)
+rfFitOJ$bestTune
+rfTestPredOJ <- predict(rfFitOJ, testOJ)
+table(rfTestPredOJ, testOJ$Purchase)
+getACC(testOJ$Purchase, rfTestPredOJ)
+```
+
+**(f)** Summarize the accuracies above. Which method performed the best? 
+
+\
+\
+\
+
+
+
+
+
+
+
+## For Fun
+
+Some things you could try. (NOT GRADED.)
+
+- Can you modify the code to simulate separable data?
+- Try a larger tuning grid for the radial SVM. Can you find a better model?
+- Verify that we do not need to scale the data. Use `caret` to preprocess the data. Does this make a difference? (Be sure to set seeds along the way.)
+- Can you plot the decision boundaries for the logistic regressions?
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\
+\
+\
+\
+\
+
+
+
+# Directions
+
+### Formatting
+
+- The final product of this assignment should be a single document which contains: your answers, code output relevant to answering those questions, and the code that generated that output.
+- Acceptable formats include **.html** and **.pdf**.
+- Code must be written in a `monospace` font.
+- An RMarkdown document will automatically take care of all of these formatting requirements.
+- Do not include these directions in your file. Also do not include the survey unless you complete it.
+
+### Code Randomization
+
+- The first code ran in your document must be the creation of a variable called `uin` which stores your UIN. For example:
+
+```{r}
+uin = 1234567
+```
+
+- At the beginning of **each numbered question** you must then run:
+
+```{r}
+set.seed(uin)
+```
+
+- Failure to follow these steps will result in a severe point deduction. This code must be visible in the final document.
+
+### Submission
+- Homework must be submitted online via Compass. You must submit at minimum two files:
+    - Your final document as a **.html** or **.pdf** file. This will be the document graded.
+    - The .Rmd file that produced that document.
+        - If you used an alternative method to create a final document, submit the necessary files used to create your final document. For example a .R file and a Word document.
+
+### Late Homework
+
+- Late homework will be accepted up to *48 hours* after the initial deadline.
+    - Up to 24 hours late, the assignment will incur a 5 point deduction.
+    - Up to 48 hours late, the assignment will incur a 10 point deduction.
+    - **No exceptions!** Start early and make sure your environment is working correctly and you are able to produce a working document.
+
+### Academic Integrity
+
+- Any assignment that the course staff believes to be the result of cheating beyond a reasonable doubt will be dealt with as follows:
+    - First offense: an undroppable **zero** on the assignment.
+    - Second offense: another undroppable **zero** on the assignment, as well as an official write-up of an academic integrity violation.
+- Note that cheating includes both obtaining others' work, as well as distributing your own work.
+    - You may discuss the assignment with your classmates, but your final answers must be your own. Your final document should be created independently.
+    - To avoid any issues, **DO NOT COPY AND PASTE CODE.** (With an exception for code provided for the course.)
+    - **DO NOT SHARE MARKDOWN FILES!**
+
+
+
+
+\
+\
+\

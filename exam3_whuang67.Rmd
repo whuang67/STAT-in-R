@@ -1,0 +1,558 @@
+---
+title: "Exam III - Basics of Statistical Learning"
+author: "STAT 430, Spring 2016"
+date: 'Due: Tuesday, May 10 by 11:00 PM'
+output:
+  html_document:
+    theme: lumen
+    toc: yes
+    toc_float: yes
+    code_folding: show
+header-includes: \usepackage{amsmath}
+---
+
+
+\
+\
+\
+
+
+<style type="text/css">
+
+span.bold-red1 {
+    color: red;
+    font-size: 500%;
+    font-weight: bold;
+}
+
+span.bold-red2 {
+    color: red;
+    font-size: 250%;
+    font-weight: bold;
+}
+
+</style>
+
+
+\
+\
+\
+
+
+
+
+
+
+
+For this exam you will be given two "classification" tasks on the same data. For both you will be given a training set, validation set, and a test set that only contains the predictors. You will create predictions on the test set and submit them to an auto-grader where you will receive feedback and a ranking among the class. (The ranking is only for fun.)
+
+For this exam, you may work in groups of at most **THREE.**
+
+**Please read this entire document carefully, including the detailed directions at the bottom.**
+
+# Preparation
+
+We first perform a `uin` setting for this exam. It would be a good idea to use it to set a seed.
+
+```{r, cache=TRUE}
+uin = 671105713
+```
+
+Then we need to load those libraries which will be used in this case. Those libraries which can be loaded automatically, such as `library(e1071)`, will not be mentioned here.
+
+```{r, message = FALSE, warning = FALSE}
+library(devtools)
+devtools::install_github("coatless/balamuta")
+library(balamuta)
+library(caret)
+library(kernlab)
+library(gbm)
+library(glmnet)
+```
+
+Tuning will be done using 5-fold cross-validation. In most of the following models, we will use `train()` function in the `caret` library. However, there will be one exception. When we try to fit the model `A well tuned penalized logistic regression (RIDGE)`, we will use the function `cv.glmnet()` in the `glmnet` library. In that part, we will add a statement `nfolds = 5` instead of using this `fitControl`.
+
+```{r}
+fitControl <- trainControl(method = "cv", number = 5, returnResamp = "all", verbose = FALSE)
+```
+
+# Classification Accuracy
+
+## Introduction
+
+### Useful Function
+
+Our first task is to simply find a model that has the best possible classification accuracy.
+
+```{r, cache=TRUE}
+getACC <- function(actual, predicted) {
+  mean(actual == predicted)
+}
+```
+
+### Data Introduction
+
+The data for this exam is originally from the UCI Machine Learning Repository. It has been modified for our purposes. (Any attempt to use the original data will be a waste of time. Your results must be justified via the given training data.) Take a look at the documentation to get an understanding of the feature variables. Their names in our data are slightly different, but the names are descriptive enough to match them.
+
+http://archive.ics.uci.edu/ml/datasets/Spambase
+
+Our data will store the spam status of an email (response) in a variables named `type`. This will be a factor variable with two levels: `spam` and `nonspam`.
+
+There are **three** datasets provided.
+
+- `spamTrain.csv` which should be used to train your models.
+- `spamValidate.csv` which should be used to validate your models. Consider it train data that has been put aside as a "test" set to verify that cross-validation has worked correctly.
+- `spamTest.csv` which should be used to make predictions to be submitted to the autograder. This dataset does not contain the response variable.
+
+When loading the data above, we do not specify a directory, thus assume the data is in the same directory as this file.
+
+```{r}
+spamTrain <- read.csv("spamTrain.csv")
+spamValidate <- read.csv("spamValidate.csv")
+spamTest <- read.csv("spamTest.csv")
+```
+
+### Data Visulization
+
+**Train Dataset**
+
+|            nonspam           |             spam             |
+|:----------------------------:|:----------------------------:|
+| `r table(spamTrain$type)[1]` | `r table(spamTrain$type)[2]` |
+
+**Validate Dataset**
+
+|             nonspam             |               spam              |
+|:-------------------------------:|:-------------------------------:|
+| `r table(spamValidate$type)[1]` | `r table(spamValidate$type)[2]` |
+
+The response variable is `y` and takes values `spam` and `nonspam`. Obviously, it is a factor variable. Our goal is to classify this response as well as possible. We can see above that there is a higher proportion of `nonspam` in both of the train and validate data sets.
+
+The following plots will explore the relationship of the ten feature variables with the response variable.
+
+```{r}
+featurePlot(x = spamTrain[ ,1:57], y = spamTrain$type, plot = "density",
+            scales = list(x = list(relation = "free"),
+                          y = list(relation = "free")),
+            adjust = 1.5, pch = "|", layout = c(3, 4),
+            auto.key = list(columns = 2))
+```
+
+```{r}
+featurePlot(x = spamTrain[, c(3, 12, 19, 21, 52)], y = spamTrain$type,
+            plot = "pairs", auto.key = list(columns = 2))
+
+```
+The above five plots again reinforce that `charExclamation`, `all`, `will`, `you` and `your` should be good predictors.
+
+Our goal is to classify this response as well as possible. We can see above that there is a higher proportion of Zero in the training data. This will help us choose a new cutoff which will be used in the part of `Spam Filter` and will be discussed later.
+
+## Methods
+
+We will consider four methods:
+
+- An additive logistic regression. (Using all of the features.) There is no need (or way) to tune this model. It will simply be for comparison.
+- A well tuned linear SVM.
+- A well tuned radial SVM.
+- A well tuned ensemble tree method.
+- A well tuned penalized logistic regression.
+
+For each method we will consider different sets of features:
+
+- `Small`: Only `charExclamation`, `all`, `will`, `you` and `your`.
+- `Full`: All features.
+
+For any methods we consider, we will report:
+
+- Cross-Validated accuracy.
+- Validation set accuracy.
+- Test set accuracy. (If submitted to the autograder.)
+
+### Additive Logistic Regression (glm)
+
+We can find that linear regression might produce probabilities less than zero or larger than one. But we do not have worry about this issue when we use logistic regression. It has a form of
+
+\[log(p/(1-p)) = \beta_0 + \beta_{1}x_{1} + \beta_{2}x_2 + ... + \beta_{n}x_n + \epsilon\]
+
+```{r, message=FALSE, warning=FALSE, cache=TRUE}
+set.seed(uin)
+glmFull <- train(type ~ ., data = spamTrain,
+                method = "glm",
+                family = "binomial",
+                trControl = fitControl)
+glmSmall <- train(type ~ charExclamation + all + will + you + your,
+                  data = spamTrain,
+                  method = "glm",
+                  family = "binomial",
+                  trControl = fitControl)
+```
+
+### Linear SVM (svmLinear)
+
+We try a plane which separates the classes in feature space. A hyperplane in p dimension is a flat affine subspace of dimension p-1. In general, the equation of the hyperplane has the form of
+
+\beta_0 + \beta_{1}x_1 + \beta_{2}x_2 + ... + \beta_{n}x_n = 0
+
+We can find that when p is 2, the hyperplane is a line. In this case, we try to find a hyperplane to make this classification come true.
+
+C in the tune is the cost of constraints violation (default: 1). In this case, we will set it as below.
+
+```{r, message=FALSE, warning=FALSE, cache=TRUE}
+linSvmGrid <- expand.grid(C = c(2 ^ (-5:5)))
+```
+
+```{r, cache=TRUE}
+set.seed(uin)
+linSvmFull <- train(type ~., data = spamTrain,
+                   method = "svmLinear",
+                   trControl = fitControl,
+                   tuneGrid = linSvmGrid)
+linSvmSmall <- train(type ~ charExclamation + all + will + you + your,
+                     data = spamTrain,
+                     method = "svmLinear",
+                     trControl = fitControl,
+                     tuneGrid = linSvmGrid)
+```
+
+### Radial SVM (svmRadial)
+
+Sometimes a linear boundary simply won’t work well, no matter what value of C. Some kernel functions may help. In this case, we will try Radial Kernel which has the form of
+
+\K(x_i,x_i') = exp(-\gamma*sum((x_{ij} - x_{i'j})^2))
+
+f(x) = beta_0 + sum(\alpha_i*K(x, x_i))
+
+```{r, warning=FALSE, cache=TRUE}
+radSvmGrid <- expand.grid(C = c(2 ^ (-5:5)),
+                          sigma = c(2 ^ (-3:3)))
+```
+
+```{r, cache=TRUE}
+set.seed(uin)
+radSvmFull <- train(type ~ ., data = spamTrain,
+                   method = "svmRadial",
+                   trControl = fitControl,
+                   tuneGrid = radSvmGrid)
+radSvmSmall <- train(type ~ charExclamation + all + will + you + your,
+                     data = spamTrain,
+                     method = "svmRadial",
+                     trControl = fitControl,
+                     tuneGrid = radSvmGrid)
+```
+
+### Boosting (gbm)
+
+Tune parameters for boosting
+
+The number of trees n.trees. Unlike bagging and random forests, boosting can overfit if n.trees is too large, although this overfitting tends to occur slowly if at all. We use cross-validation to select n.trees.
+
+The shrinkage parameter $\lambda$, a small positive number. This controls the rate at which boosting learns. Typical values are 0.01 or 0.001, and the right choice can depend on the problem. Very small $\lambda$ can require using a very large value of n.trees in order to achieve good performance. WE will try 0.1, 0.01 and 0.001 here.
+
+The number of splits d in each tree, which controls the complexity of the boosted ensemble. Often d = 1 works well, in which case each tree is a stump, consisting of a single split and resulting in an additive model. More generally d is the interaction depth, and controls the interaction order of the boosted model, since d splits can involve at most d variables.
+
+n.minobsinnode is the minimum number of observations in the trees terminal nodes. We set it 10 here. In this case, the tune we will fit will be shown below. We use Cross-Validation to find out the best tune for our regression model.
+
+```{r, warning=FALSE, message=FALSE, cache=TRUE}
+gbmGrid <- expand.grid(interaction.depth = 1:4,
+                       n.trees = (1:4)*500,
+                       shrinkage = c(0.001, 0.01, 0.1),
+                       n.minobsinnode = 10)
+```
+
+```{r, cache=TRUE, message=FALSE}
+set.seed(uin)
+gbmFull <- train(type ~ ., data = spamTrain,
+                method = "gbm",
+                trControl = fitControl,
+                tuneGrid = gbmGrid,
+                verbose = FALSE)
+gbmSmall <- train(type ~ charExclamation + all + will + you + your,
+                  data = spamTrain,
+                  method = "gbm",
+                  trControl = fitControl,
+                  tuneGrid = gbmGrid,
+                  verbose = FALSE)
+```
+
+### RIDGE regression (glmnet)
+
+When we have a bunch of predictors in one case (sometimes p>n, but clearly not in this example), we can fit a model containing all p predictors using a technique that constrains or regularizes the coefficient estimates, or equivalently, that shrinks the coefficient estimates towards zero. The RIDGE regression coefficient estimates $\beta$ are the values which minimize (RSS + $\lambda$*sum($\beta^2$)).
+
+The part $\lambda$*sum($\beta^2$) is called shrinkage penality, and is small when $\beta$s are closed to zero.
+
+The $\lambda$ we saw above is the tuning parameter and it is critical to select a good value. This this part, we will try $\lambda$s which range from `r exp(-9)` to `r exp(-1)` (from exp(-9) to exp(-1)) by using the function `cv.glmnet()`. This function will help us find two best tunes, one of which has the smallest MSE and another one has an MSE within one standard error of the smallest. But this function will not report CV accuracy for us. So we have to try a second tune which contains these two $\lambda$s and use function `train()` to do this. What's more, we cannot forget to add `alpha = 1` to both of this models to show that it is a RIDGE regression.
+
+```{r, cache=TRUE, message=FALSE, warning=FALSE}
+set.seed(uin)
+XFull <- model.matrix(type ~ ., data = spamTrain)[, -1]
+XSmall <- model.matrix(type ~ charExclamation + all + will + you + your,
+                       data = spamTrain)[,-1]
+y.factor <- spamTrain$type
+y <- ifelse(y.factor == "spam", 1, 0)
+glmnetGrid1 <- exp(seq(-9, -1, by = 0.09))
+```
+
+```{r, cache=TRUE}
+set.seed(uin)
+glmnetFull1 <- cv.glmnet(XFull, y, alpha = 1, lambda = glmnetGrid1, nfolds = 5)
+plot(glmnetFull1,
+     main = "Find two chosen lambdas")
+ # the Second Tune which has been mentioned above
+glmnetGrid2 <- expand.grid(alpha = 1, lambda = c(glmnetFull1$lambda.min,
+                                                 glmnetFull1$lambda.1se))
+glmnetFull <- train(type ~ ., data = spamTrain,
+                   method = "glmnet",
+                   trControl = fitControl,
+                   tuneGrid = glmnetGrid2)
+```
+
+```{r, cache=TRUE}
+set.seed(uin)
+glmnetSmall1 <- cv.glmnet(XSmall, y, alpha = 1, lambda = glmnetGrid1, nfolds = 5)
+plot(glmnetSmall1,
+     main = "Find two chosen lambdas")
+ # the Second Tune which has been mentioned above
+glmnetGrid2 <- expand.grid(alpha = 1, lambda = c(glmnetSmall1$lambda.min,
+                                                 glmnetSmall1$lambda.1se))
+glmnetSmall <- train(type ~ charExclamation + all + will + you + your,
+                     data = spamTrain,
+                     method = "glmnet",
+                     trControl = fitControl,
+                     tuneGrid = glmnetGrid2)
+```
+
+## Summary
+
+### Best Tunes of Each Models
+
+First, we need to show the best tune which we got and used for the following analysis from the models above.
+
+**Additive Lofistic Regression**
+
+There is no need (or way) to tune this model, which has already been mentioned by this task.
+
+**Linear SVM**
+
+```{r}
+linSvmFull$bestTune # Best Tune of Full Model
+linSvmSmall$bestTune # Best Tune of Small Model
+```
+
+**Radial SVM**
+
+```{r}
+radSvmFull$bestTune # Best Tune of Full Model
+radSvmSmall$bestTune # Best Tune of Small Model
+```
+
+**Boosting**
+
+```{r}
+gbmFull$bestTune # Best Tune of Full Model
+gbmSmall$bestTune # Best Tune of Small Model
+```
+
+**RIDGE**
+
+```{r}
+glmnetFull$bestTune # Best Tune of Full Model
+glmnetSmall$bestTune # Best Tune of Small Model
+```
+
+### CV and Validation Accuracies
+
+Based on the `getScore()` function offered by the following part, we can find out that if we want to get a better score, we need to try our best to minimize the `False Spam Rate (FSR)` while keeping the accuracies higher. I think it is necessary to calculate `Validate FSRs` and consider them as another important metric in this case even though it was not mentioned by this task.
+
+Train Accuracies will not been calculated and shown here. Because they are not as meaningful as those three metrics and may lead us to over fitting which is bad.
+
+|    Model    |              CV Accuracy              |                         Validate Accuracy                         |                                               Validate FSR                                               |
+|:-----------:|:-------------------------------------:|:-----------------------------------------------------------------:|:--------------------------------------------------------------------------------------------------------:|
+|   glmFull   |      `r glmFull$results$Accuracy`     |   `r getACC(spamValidate$type, predict(glmFull, spamValidate))`   |   `r sum(predict(glmFull, spamValidate)=="spam" & spamValidate$type =="nonspam")/dim(spamValidate)[1]`   |
+|   glmSmall  |     `r glmSmall$results$Accuracy`     |   `r getACC(spamValidate$type, predict(glmSmall, spamValidate))`  |   `r sum(predict(glmSmall, spamValidate)=="spam" & spamValidate$type =="nonspam")/dim(spamValidate)[1]`  |
+|  linSvmFull |  `r max(linSvmFull$results$Accuracy)` |  `r getACC(spamValidate$type, predict(linSvmFull, spamValidate))` |  `r sum(predict(linSvmFull, spamValidate)=="spam" & spamValidate$type =="nonspam")/dim(spamValidate)[1]` |
+| linSvmSmall | `r max(linSvmSmall$results$Accuracy)` | `r getACC(spamValidate$type, predict(linSvmSmall, spamValidate))` | `r sum(predict(linSvmSmall, spamValidate)=="spam" & spamValidate$type =="nonspam")/dim(spamValidate)[1]` |
+|  radSvmFull |  `r max(radSvmFull$results$Accuracy)` |  `r getACC(spamValidate$type, predict(radSvmFull, spamValidate))` |  `r sum(predict(radSvmFull, spamValidate)=="spam" & spamValidate$type =="nonspam")/dim(spamValidate)[1]` |
+| radSvmSmall | `r max(radSvmSmall$results$Accuracy)` | `r getACC(spamValidate$type, predict(radSvmSmall, spamValidate))` | `r sum(predict(radSvmSmall, spamValidate)=="spam" & spamValidate$type =="nonspam")/dim(spamValidate)[1]` |
+|   gbmFull   |   `r max(gbmFull$results$Accuracy)`   |   `r getACC(spamValidate$type, predict(gbmFull, spamValidate))`   |   `r sum(predict(gbmFull, spamValidate)=="spam" & spamValidate$type =="nonspam")/dim(spamValidate)[1]`   |
+|   gbmSmall  |   `r max(gbmSmall$results$Accuracy)`  |   `r getACC(spamValidate$type, predict(gbmSmall, spamValidate))`  |   `r sum(predict(gbmSmall, spamValidate)=="spam" & spamValidate$type =="nonspam")/dim(spamValidate)[1]`  |
+|  glmnetFull |  `r max(glmnetFull$results$Accuracy)` |  `r getACC(spamValidate$type, predict(glmnetFull, spamValidate))` |  `r sum(predict(glmnetFull, spamValidate)=="spam" & spamValidate$type =="nonspam")/dim(spamValidate)[1]` |
+| glmnetSmall | `r max(glmnetSmall$results$Accuracy)` | `r getACC(spamValidate$type, predict(glmnetSmall, spamValidate))` | `r sum(predict(glmnetSmall, spamValidate)=="spam" & spamValidate$type =="nonspam")/dim(spamValidate)[1]` |
+
+# Spam Filter
+
+Your second task is to actually create a decent spam filter. Only concerning ourselves with the overall accuracy means that marking `spam` as `nonspam`, and `nonspam` as `spam` are equal errors. But they clearly are not! Marking a `nonspam` email as `spam` could have terrible consequences. 
+
+To asses how well a spam filter is working, we will calculate the following score:
+
+
+```{r, cache=TRUE}
+getScore <- function(predicted, actual) {
+   1 * sum(predicted == "spam" & actual == "spam") +
+ -20 * sum(predicted == "spam" & actual == "nonspam") +
+  -1 * sum(predicted == "nonspam" & actual == "spam") +
+   1 * sum(predicted == "nonspam" & actual == "nonspam")
+}
+```
+
+Positive weights are assigned to correct decisions. Negative weights are assigned to incorrect decisions. (Marking `nonspam` email as `spam` being penalized much harder.) Higher scores are better.
+
+Use different probability cutoffs to alter the sensitivity and specificity of a method in order to obtain a better score.
+
+Try at least the following:
+
+- The additive logistic regression with an unaltered cutoff.
+- The additive logistic regression with an altered cutoff.
+- Your best method from above with an unaltered cutoff.
+- Your best method from above with an altered cutoff.
+
+For each, report:
+
+- Validation set score. (DO NOT TRAIN ON THE VALIDATION SET.)
+- Test set score. (If submitted to the autograder.)
+
+Submit (at least) your best method to the autograder after making predictions on the test set.
+
+You do not need to exhaustively search cutoff values, but you should at the very least make an improvement in score over the unaltered methods.
+
+Again, when discussing your results, reason based only on your validation set results. Note that validation and test scores will not be comparable because of the difference in size of the datasets.
+
+## Additive Logistic Regression
+
+We can find from the table above that the full model did better than the reduced model. What's more, the full model of Additive Logistic Regression has the same predictors with the best model which we will be submitted to Autograder. I think it would be a good idea to calculate the two scores of the `glmFull` model in this part.
+
+### With an Unaltered Cutoff
+
+```{r, cache=TRUE}
+set.seed(uin)
+getScore(predict(glmFull, spamValidate), spamValidate$type)
+```
+
+### With an Altered Cutoff
+
+Based on the previous part, we can find out that `r table(spamValidate$type)[1]/dim(spamValidate)[1]` of the responses of observations in the train data set are `nonspam`. In this case, I think it could be a better choice if we set this number as the new cutoff.
+
+```{r}
+newCutoff <- table(spamValidate$type)[1]/dim(spamValidate)[1]
+```
+
+We can find that the new cutoff is `r newCutoff`. If the probability (spam) we get is larger than `r newCutoff`, the response will be predicted as `spam` while the probability is smaller than it, the response will be predicted as `nonspam`. This new cutoff will be used in this and the following part.
+
+```{r, cache=TRUE}
+set.seed(uin)
+predGlmProb <- predict(glmFull, spamValidate, type = "prob")$spam
+predGlmCut <- ifelse(predGlmProb > newCutoff, "spam", "nonspam")
+getScore(predGlmCut, spamValidate$type)
+```
+
+## Boosting
+
+### With an Unaltered Cutoff
+
+```{r, cache=TRUE}
+set.seed(uin)
+getScore(predict(gbmFull, spamValidate), spamValidate$type)
+```
+
+### With an Altered Cutoff
+
+In this part, we will use the same cutoff which has been mentioned in the previous part.
+
+```{r, cache=TRUE}
+set.seed(uin)
+predGbmProb <- predict(gbmFull, spamValidate, type = "prob")$spam
+predGbmCut <- ifelse(predGbmProb > newCutoff, "spam", "nonspam")
+getScore(predGbmCut, spamValidate$type)
+```
+
+## Summary
+
+|  Model  |                         Unaltered Score                         |                Altered Score                |
+|:-------:|:---------------------------------------------------------------:|:-------------------------------------------:|
+| glmFull | `r getScore(predict(glmFull, spamValidate), spamValidate$type)` | `r getScore(predGlmCut, spamValidate$type)` |
+| gbmFull | `r getScore(predict(gbmFull, spamValidate), spamValidate$type)` | `r getScore(predGbmCut, spamValidate$type)` |
+
+Based on the results of the `Boosting` Model, both of the scores we got are way higher than the previous part. It illustrates that this model does do better than the Additive Logistic Regression. What's more, the new cutoff `r newCutoff` also works well in both of the two models. Both of the scores increase greatly after being applied with it.
+
+But we can find that this new cutoff is chose based on the acutal response variables of the spamValidate dataset, which seems not be very smart method in the real world. Because we do not know the actual responses which we want to predict in most of the real world cases. But, if we try to calculate this proportion of the train dataset (which is `r table(spamTrain$type)[1]/dim(spamTrain)[1]`) as well, we may find out that they are almost the same. So I think this method to choose the new cutoff should be fine even though it does have some flaws which we cannot ignore.
+
+# Conclusion
+
+Based on those two parts above, we can find out that the model `gbmFull` should be considered as the best model in this particular case. It has all of the CV ACcuracy, Validate Accuracy and Validate False Spam Rate (which is not required by this task but should be regarded as a necessary metric ) are the best at the same time. So we will predict this the responses of the test dataset and calculate its score by using the model `gbmFull`, and then submit it to the Auto-grader.
+
+```{r, message=FALSE}
+ # Generate CSV Document
+gen_agfile(predict(gbmFull, spamTest), file.name = "toAutograder.csv")
+```
+
+\
+\
+\
+
+
+
+# Directions
+
+### Overall Formatting
+
+- The final product of this exam should be a single human-readable document.
+- Acceptable formats include **.html** and **.pdf**.
+- Any code displayed must be written in a `monospace` font.
+- An RMarkdown generated document will automatically take care of all of these formatting requirements.
+
+### Code Randomization
+
+You are not required to perform any UIN setting in this Exam, but, it would be a very good idea to set a seed anyway. (So your results aren't constantly changing on you.)
+
+### Submission
+
+- The exam document must be submitted online via Compass. You must submit at minimum two files:
+    - Your final document as a **.html** or **.pdf** file. This will be the document graded.
+    - The .Rmd file that produced that document.
+        - If you used an alternative method to create a final document, submit the necessary files used to create your final document. For example a .R file and a Word document.
+        - **Any .R or .Rmd files should be written such that they will run in a folder which contains the data files.**
+- Where requested, results should be submitted to the autograder.
+
+### Late Exam
+
+- A late exam will be accepted up to *48 hours* after the initial deadline.
+    - Up to 24 hours late, the exam will incur a 10 point deduction.
+    - Up to 48 hours late, the exam will incur a 20 point deduction.
+    - **No exceptions!** Start early and make sure your environment is working correctly and you are able to produce and submit a working document. See big bold red text above.
+
+### Groups
+
+- For this exam you may work in groups of at most **THREE**.
+- Only one person should submit the final document to Compass.
+- The same person should submit to the autograder.
+- The final document should clearly indicate the names and NetIDs of the group members. Also indicate which group member submitted to the autograder.
+
+### Academic Integrity
+
+This is an exam and there can be **no collaboration or discussion** *outside of your group*. Any and all questions about the exam should be brought to the course staff.
+
+- Any exam that the course staff believes to be the result of cheating beyond a reasonable doubt will be dealt with as harshly as possible.
+    - To avoid any issues, **DO NOT COPY AND PASTE CODE.** (With an exception for code provided by the course.)
+    - **DO NOT SHARE MARKDOWN FILES!**
+    
+### Grading
+
+Grades will be assigned based on a combination of *correctness of results* and *commincation of results*. 
+
+**Correctness of results** will be determined based on how well your best submitted predictions perform. 
+
+**Commincation of results** is based on your written report. It is not simply sufficient to run methods and report output. Assume the reader of your document is not familiar with either the assignment or the data being used. (And does not have access to the data.) Your document should contain three parts:
+
+- Introduction
+    - Goal of analyses.
+    - Basic data summary. (Visualize the data. What are some of the variables. Etc.)
+- Methods
+    - What methods / models are used?
+    - How will they be fit / tuned?
+    - Actually fit / tune in R. (Consider storing results, and only reporting them later.)
+- Results
+    - **SUMMARY OF RESULTS** (Make your results easy to find!)
+    - Discussion of results.
+    - Decision. What model(s) did you submit to the auto-grader? Why? What were the test results?
+
+**Note:** In the interest of an easy to read document, some code may be hidden using `echo = FALSE` if it does not make the analysis easier to understand to a reader.
+

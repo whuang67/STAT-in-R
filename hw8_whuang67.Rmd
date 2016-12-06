@@ -1,0 +1,303 @@
+---
+title: "Homework Eight"
+author: "STAT 430, Spring 2016"
+date: 'Due: Saturday, April 30 by 11:00 PM'
+output:
+  html_document:
+    theme: lumen
+    toc: yes
+    toc_float: yes
+    code_folding: show
+header-includes: \usepackage{amsmath}
+---
+
+
+
+
+
+\
+\
+\
+
+**The last homework.**
+
+<br><br>
+
+**:(**
+
+
+
+```{r, echo = TRUE}
+uin = 671105713
+```
+
+
+\
+\
+\
+
+
+
+
+
+# Assignment
+
+
+## Question 1 
+
+For this question, use the data found in `clust_data.csv`. We will attempt to cluster this data using $k$-means. But, what $k$ should we use?
+
+
+
+<br><br>
+**(a)** Apply $k$-means to this data 15 times, using number of centers from 1 to 15. Each time use `nstart = 10` and store the `tot.withinss` value from the resulting object. (Hint: write a for-loop.) The `tot.withinss` measures how variable the values are within a cluster, which we would like to be low. So obviously this value will be lower with more centers, no matter how many clusters there truly are. Plot this value against the number of centers. Look for a "elbow", the number of centers where the improvement suddenly drops off. Based on this plot, how many cluster do you think should be used for this data?
+
+```{r}
+set.seed(uin)
+clust_data <- read.csv("clust_data.csv")
+kmeans_output <- rep(0, 15)
+for(i in 1:15){
+  kmeans_output[i] <- kmeans(clust_data, i, nstart = 10)$tot.withinss
+}
+plot(cbind(1:15), kmeans_output, xlab="k", ylab="how variable the values are within a cluster")
+```
+
+We can find out that the "elbow" is `4`. So I think the cluster should be `4` in this case.
+
+**(b)** Re-apply $k$-means for your chosen number of centers. How many observations are placed in each cluster? What is the value of `tot.withinss`?
+
+```{r}
+kmeans(clust_data, 4, nstart = 10)
+kmeans(clust_data, 4, nstart = 10)$tot.withinss
+```
+
+**(c)** Visualize this data. Plot the data using the first two variables and color the points according to the $k$-means clustering. Based on this plot, do you think you made a good choice for the number of centers? (Briefly explain.)
+
+```{r}
+kmeans_cluster <- kmeans(clust_data, 4, nstart = 10)$cluster
+plot(
+  clust_data[,1],
+  clust_data[,2],
+  pch = 20,
+  col = kmeans_cluster,
+  xlab = "First Variable",
+  ylab = "Second Variable"
+)
+```
+
+**(d)** Use PCA to visualize this data. Plot the data using the first two principal components and color the points according to the $k$-means clustering. Based on this plot, do you think you made a good choice for the number of centers? (Briefly explain.)
+
+```{r}
+clust_data_pca <- prcomp(clust_data, scale = TRUE)
+plot(
+  clust_data_pca$x[,1],
+  clust_data_pca$x[,2],
+  pch = 20,
+  col = kmeans_cluster,
+  xlab = "First Variable",
+  ylab = "Second Variable"
+)
+```
+
+**(e)** Calculate the proportion of variation explained by the principal components. Make a plot of the cumulative proportion explained. How many principal components are need to explain 95% of the variation in the data?
+
+```{r}
+get_PVE <- function(pca_out){
+  pca_out$sdev^2 / sum(pca_out$sdev^2)
+}
+pve <- get_PVE(clust_data_pca)
+pve
+plot(
+  cumsum(pve),
+  xlab = "Principal Component",
+  ylab = "Proportion of Variance Explained",
+  ylim = c(0, 1),
+  type = 'b'
+)
+```
+
+
+\
+\
+\
+
+
+
+
+
+
+
+## Question 2
+
+For this question we will return to the `USArrests` data from the notes. (This is a default `R` dataset.)
+
+**(a)** Perform hierarchical clustering six times. Consider all possible combinations of linkages (average, single, complete) and data scaling. (Scaled, Unscaled.)
+
+| Linkage  | Scaling |
+|----------|---------|
+| Single   | No      |
+| Average  | No      |
+| Complete | No      |
+| Single   | Yes     |
+| Average  | Yes     |
+| Complete | Yes     |
+
+Each time, cut the dendrogram at a height that results in four distinct clusters. Plot the results, with a color for each cluster.
+
+```{r}
+library(sparcl)
+USArrests_Sinhc <- hclust(dist(USArrests), method = "single")
+USArrests_Sincut <- cutree(USArrests_Sinhc, 4)
+ColorDendrogram(USArrests_Sinhc, y = USArrests_Sincut,
+                labels = names(USArrests_Sincut),
+                main = "Single Linkage, No Scaling",
+                branchlength = 1.5)
+```
+
+```{r}
+USArrests_Avehc <- hclust(dist(USArrests), method = "average")
+USArrests_Avecut <- cutree(USArrests_Avehc, 4)
+ColorDendrogram(USArrests_Avehc, y = USArrests_Avecut,
+                labels = names(USArrests_Avecut),
+                main = "Average Linkage, No Scaling",
+                branchlength = 1.5)
+```
+
+```{r}
+USArrests_Comhc <- hclust(dist(USArrests), method = "complete")
+USArrests_Comcut <- cutree(USArrests_Comhc, 4)
+ColorDendrogram(USArrests_Comhc, y = USArrests_Comcut,
+                labels = names(USArrests_Comcut),
+                main = "Complete Linkage, No Scaling",
+                branchlength = 1.5)
+```
+
+```{r}
+USArrests_SinScalehc <- hclust(dist(scale(USArrests)), method = "single")
+USArrests_SinScalecut <- cutree(USArrests_SinScalehc, 4)
+ColorDendrogram(USArrests_SinScalehc, y = USArrests_SinScalecut,
+                labels = names(USArrests_SinScalecut),
+                main = "Single Linkage, Scaling",
+                branchlength = 1.5)
+```
+
+```{r}
+USArrests_AveScalehc <- hclust(dist(scale(USArrests)), method = "average")
+USArrests_AveScalecut <- cutree(USArrests_AveScalehc, 4)
+ColorDendrogram(USArrests_AveScalehc, y = USArrests_AveScalecut,
+                labels = names(USArrests_AveScalecut),
+                main = "Average Linkage, Scaling",
+                branchlength = 1.5)
+```
+
+```{r}
+USArrests_ComScalehc <- hclust(dist(scale(USArrests)), method = "complete")
+USArrests_ComScalecut <- cutree(USArrests_ComScalehc, 4)
+ColorDendrogram(USArrests_ComScalehc, y = USArrests_ComScalecut,
+                labels = names(USArrests_ComScalecut),
+                main = "Complete Linkage, Scaling",
+                branchlength = 1.5)
+```
+
+**(b)** Based on the above plots, do any of the results seem more useful than the others? (There is no correct answer here.) Pick your favorite. (Again, no correct answer.)
+
+**(c)** Use the documentation for `?hclust` to find other possible linkages. Pick one and try it. Compare the results to your favorite from **(b)**. Is it much different?
+
+**(d)** Use the documentation for `?dist` to find other possible distance measures. (We have been using `euclidean`.) Pick one (not `binary`) and try it. Compare the results to your favorite from **(b)**. Is it much different?
+
+\
+\
+\
+
+
+
+
+
+
+
+## For Fun
+
+Some things you could try. (NOT GRADED.)
+
+- Four was somewhat arbitrarily chosen for problem two. Try using $k$-means to find a good number of clusters. (Is there an obvious answer?) Then cut the dendrograms accordingly. Compare the results with $k$-means.
+- One of the possible ways to `preProcess` data using `caret` is with PCA. See if you can figure out how to do this. It will use only the PCs necessary to explain 95% of the variation. (Actually you can modify this.) Sometimes this will significantly reduce dimensionality and can improve computation time, and possibly results. (Try KNN.)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+\
+\
+\
+\
+\
+
+
+
+# Directions
+
+### Formatting
+
+- The final product of this assignment should be a single document which contains: your answers, code output relevant to answering those questions, and the code that generated that output.
+- Acceptable formats include **.html** and **.pdf**.
+- Code must be written in a `monospace` font.
+- An RMarkdown document will automatically take care of all of these formatting requirements.
+- Do not include these directions in your file. Also do not include the survey unless you complete it.
+
+### Code Randomization
+
+- The first code ran in your document must be the creation of a variable called `uin` which stores your UIN. For example:
+
+```{r}
+uin = 1234567
+```
+
+- At the beginning of **each numbered question** you must then run:
+
+```{r}
+set.seed(uin)
+```
+
+- Failure to follow these steps will result in a severe point deduction. This code must be visible in the final document.
+
+### Submission
+- Homework must be submitted online via Compass. You must submit at minimum two files:
+    - Your final document as a **.html** or **.pdf** file. This will be the document graded.
+    - The .Rmd file that produced that document.
+        - If you used an alternative method to create a final document, submit the necessary files used to create your final document. For example a .R file and a Word document.
+
+### Late Homework
+
+- Late homework will be accepted up to *48 hours* after the initial deadline.
+    - Up to 24 hours late, the assignment will incur a 5 point deduction.
+    - Up to 48 hours late, the assignment will incur a 10 point deduction.
+    - **No exceptions!** Start early and make sure your environment is working correctly and you are able to produce a working document.
+
+### Academic Integrity
+
+- Any assignment that the course staff believes to be the result of cheating beyond a reasonable doubt will be dealt with as follows:
+    - First offense: an undroppable **zero** on the assignment.
+    - Second offense: another undroppable **zero** on the assignment, as well as an official write-up of an academic integrity violation.
+- Note that cheating includes both obtaining others' work, as well as distributing your own work.
+    - You may discuss the assignment with your classmates, but your final answers must be your own. Your final document should be created independently.
+    - To avoid any issues, **DO NOT COPY AND PASTE CODE.** (With an exception for code provided for the course.)
+    - **DO NOT SHARE MARKDOWN FILES!**
+
+
+
+
+\
+\
+\
