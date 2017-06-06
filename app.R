@@ -3,7 +3,134 @@ library(dplyr)
 library(ggplot2)
 library(shiny)
 library(lazyeval)
+library(pROC)
+library(gridExtra)
 
+
+ui3 <- shinyUI(pageWithSidebar(
+  
+  
+  # Application title
+  headerPanel("Krannert Center (Wenke Huang's sample work)"),
+  
+  # Sidebar with controls to select the random distribution type
+  # and number of observations to generate. Note the use of the br()
+  # element to introduce extra vertical spacing
+  sidebarPanel(
+    conditionalPanel(
+      condition = "input.conditionalPanels <= 2",
+      selectInput("variable1", label = "Variable 1:",
+                  choices = c("PriceType", "Theatre", "Disposition",
+                              "PurchasedOnline", "Producer", "Category",
+                              "Price","Capacity",
+                              "TicketSold", "DaysBetween", "QuantityPurchased",
+                              "QuantityPurchasedTotal",
+                              "EventPurchasedTotal"), selected = NULL),
+      selectInput("variable2", label = "Variable 2:",
+                  choices = c("PriceType", "Theatre", "Disposition",
+                              "PurchasedOnline", "Producer", "Category",
+                              "Redeemed (Response Variable)" = "Redeemed",
+                              "Price","Capacity",
+                              "TicketSold", "DaysBetween", "QuantityPurchased",
+                              "QuantityPurchasedTotal",
+                              "EventPurchasedTotal"), selected = "Redeemed"),
+      radioButtons("Conf_Level", label = "Confidence Level:",
+                   choices = c("0.90" = 0.9,
+                               "0.95" = 0.95,
+                               "0.99" = 0.99),
+                   selected = 0.95)
+    ),
+    
+    conditionalPanel(
+      condition = "input.conditionalPanels >= 3",
+      checkboxGroupInput("Predictor",
+                         label = "Potential Predictors:",
+                         choices = c("PriceType", "Theatre", "Disposition",
+                                     "PurchasedOnline", "Producer", "Category",
+                                     "Price","Capacity",
+                                     "TicketSold", "DaysBetween", "QuantityPurchased",
+                                     "QuantityPurchasedTotal",
+                                     "EventPurchasedTotal"),
+                         selected = c("PriceType","QuantityPurchased", "Price",
+                                      "QuantityPurchasedTotal",
+                                      "TicketSold", "EventPurchasedTotal")),
+      radioButtons("size", "Training Set Size:",
+                   choices = c("50%" = 25918,
+                               "60%" = 31102,
+                               "70%" = 36285,
+                               "80%" = 41469,
+                               "90%" = 46652),
+                   selected = 36285)
+    ),
+    br(),
+    width = 3),
+  
+  # Show a tabset that includes a plot, summary, and table view
+  # of the generated distribution
+  mainPanel(
+    tabsetPanel(
+      tabPanel("Visualization",
+               plotOutput("plot2"),
+               h5(strong("Remarks:")),
+               p("* For Categorical variable vs Categorical variable, ",
+                 strong("Pearson Chi-Square test"),
+                 " is applied."),
+               p("* For Categorical variable vs Numerical variable, ",
+                 strong("ANOVA"),
+                 " and ",
+                 strong("Tukey HSD test"),
+                 " is applied."),
+               p("* For Numerical variable vs Numerical variable, ",
+                 strong("Pearson Correlation"),
+                 " is applied"),
+               value = 1),
+      tabPanel("Statistical Test",
+               tableOutput("table"),
+               h5(strong("Remark:")),
+               p("* For Categorical variable vs Categorical variable, ",
+                 strong("Contingency Table"),
+                 " is applied."),
+               p("* For Categorical variable vs Numerical variable, ",
+                 strong("ANOVA"),
+                 " and ",
+                 strong("Tukey HSD test"),
+                 " is applied."),
+               p("* For Numerical variable vs Numerical variable, ",
+                 strong("Pearson Correlation"),
+                 " and ",
+                 strong("Covariance"),
+                 " is applied"),
+               value = 2),
+      tabPanel("Summary of Fitted Model",
+               p("* The summary of ",
+                 strong("Logistic Regression"),
+                 " model is shown below."),
+               p("* Potential input ",
+                 strong("Predictors"),
+                 " and ",
+                 strong("Size of Training Dataset"),
+                 " can be chosen from the left side"),
+               verbatimTextOutput("summary"),
+               value = 3),
+      tabPanel("Prediction",
+               p("* ",
+                 strong("ROC Curve"),
+                 " and its corresponding ",
+                 strong("AUC"),
+                 " are shown below."),
+               p("* The left plot is prediction from the ",
+                 strong("Training Dataset"),
+                 " while the right one is from the ",
+                 strong("Testing Dataset")),
+               p("* Please wait for around 5 seconds for the plots. ",
+                 "Thank you for your patience!"),
+               plotOutput("plot1"),
+               value = 4),
+      type = "pills",
+      id = "conditionalPanels"
+    )
+  )
+))
 
 
 
@@ -17,14 +144,14 @@ ui1 <- shinyUI(pageWithSidebar(
   # and number of observations to generate. Note the use of the br()
   # element to introduce extra vertical spacing
   sidebarPanel(
-    selectInput("variable1", label = "Variable 1",
+    selectInput("variable1", label = "Variable 1:",
                 choices = c("PriceType", "Theatre", "Disposition",
                             "PurchasedOnline", "Producer", "Category",
                             "Price","Capacity",
                             "TicketSold", "DaysBetween", "QuantityPurchased",
                             "QuantityPurchasedTotal",
                             "EventPurchasedTotal"), selected = NULL),
-    selectInput("variable2", label = "Variable 2",
+    selectInput("variable2", label = "Variable 2:",
                 choices = c("PriceType", "Theatre", "Disposition",
                             "PurchasedOnline", "Producer", "Category",
                             "Redeemed (Response Variable)" = "Redeemed",
@@ -32,11 +159,29 @@ ui1 <- shinyUI(pageWithSidebar(
                             "TicketSold", "DaysBetween", "QuantityPurchased",
                             "QuantityPurchasedTotal",
                             "EventPurchasedTotal"), selected = "Redeemed"),
-    radioButtons("Conf_Level", label = "Confidence Level",
+    radioButtons("Conf_Level", label = "Confidence Level:",
                  choices = c("0.90" = 0.9,
                              "0.95" = 0.95,
                              "0.99" = 0.99),
                  selected = 0.95),
+    checkboxGroupInput("Predictor",
+                       label = "Potential Predictors:",
+                       choices = c("PriceType", "Theatre", "Disposition",
+                                   "PurchasedOnline", "Producer", "Category",
+                                   "Price","Capacity",
+                                   "TicketSold", "DaysBetween", "QuantityPurchased",
+                                   "QuantityPurchasedTotal",
+                                   "EventPurchasedTotal"),
+                       selected = c("PriceType", "Theatre", "Producer", "DaysBetween",
+                                    "QuantityPurchased", "Price", "QuantityPurchasedTotal",
+                                    "TicketSold", "EventPurchasedTotal")),
+    radioButtons("size", "Training Set Size:",
+                 choices = c("50%" = 25918,
+                             "60%" = 31102,
+                             "70%" = 36285,
+                             "80%" = 41469,
+                             "90%" = 46652),
+                 selected = 36285),
     br(),
     width = 3),
   
@@ -57,9 +202,7 @@ ui1 <- shinyUI(pageWithSidebar(
                  " is applied."),
                p("* For Numerical variable vs Numerical variable, ",
                  strong("Pearson Correlation"),
-                 " is applied")), 
-      #tabPanel("Summary",
-      #         textOutput("summary")), 
+                 " is applied")),
       tabPanel("Sample Work (Statistical Test)",
                tableOutput("table"),
                h5(strong("Remark:")),
@@ -76,6 +219,8 @@ ui1 <- shinyUI(pageWithSidebar(
                  " and ",
                  strong("Covariance"),
                  " is applied")),
+      tabPanel("Summary of Fitted Model",
+               verbatimTextOutput("summary")),
       type = "pills"
     )
   )
@@ -85,25 +230,8 @@ ui1 <- shinyUI(pageWithSidebar(
 
 
 
-ui <- sidebarPanel(
-  selectInput("variable1", label = "Variable 1",
-              choices = c("PriceType", "Theatre", "Disposition",
-                          "PurchasedOnline", "Producer", "Category",
-                          "Price","Capacity",
-                          "TicketSold", "DaysBetween", "QuantityPurchased",
-                          "QuantityPurchasedTotal",
-                          "EventPurchasedTotal"), selected = 20),
-  selectInput("variable2", label = "Variable 2",
-              choices = c("PriceType", "Theatre", "Disposition",
-                          "PurchasedOnline", "Producer", "Category",
-                          "Redeemed", "Price","Capacity",
-                          "TicketSold", "DaysBetween", "QuantityPurchased",
-                          "QuantityPurchasedTotal",
-                          "EventPurchasedTotal"), selected = 20),
-  mainPanel(plotOutput("plot2")))
-
-
 kran <- read.csv("Cleaned_Ticket_Redemption_Data.csv", header = TRUE)
+kran$Redeemed_Numeric <- kran$Redeemed
 kran$Redeemed <- as.factor(kran$Redeemed)
 kran$DaysBetween <- as.numeric(kran$DaysBetween)
 kran$Disposition <- ifelse(is.na(kran$Disposition) == TRUE,
@@ -157,6 +285,10 @@ server2 <- function(input, output){
               select_(a = input$variable1,
                       b = input$variable2) %>%
               mutate_(Conf_Level = input$Conf_Level))
+    observe(dat$Train <- kran[sample(1:51863, input$size),
+                             names(kran) %in% c(input$Predictor, "Redeemed_Numeric")])
+    observe(dat$Test <- kran[-sample(1:51863, input$size),
+                             names(kran) %in% c(input$Predictor, "Redeemed_Numeric")])
 
   
   
@@ -402,10 +534,69 @@ server2 <- function(input, output){
   #caption.placement = getOption("xtable.caption.placement", "top"),
   rownames = TRUE,
   digit = 3)
+  
+  output$summary <- renderPrint({
+    Logistic <- glm(Redeemed_Numeric ~.,
+                    data = dat[["Train"]],
+                    family = binomial())
+    summary(Logistic)
+  })
+  
+  
+  output$plot1 <- renderPlot({
+    Logistic <- glm(Redeemed_Numeric ~.,
+                    data = dat[["Train"]],
+                    family = binomial())
+    
+    
+    prediction_response <- predict(Logistic, dat[["Train"]], type = "response")
+    a <- roc(dat[["Train"]]$Redeemed, prediction_response)
+    ROCdata <- data.frame(Sensitivity = a$sensitivities,
+                          Specificity = a$specificities)
+    
+    
+    test_response <- predict(Logistic, dat[["Test"]], type = "response")
+    b <- roc(dat[["Test"]]$Redeemed, test_response)
+    ROCdata_test <- data.frame(Sensitivity = b$sensitivities,
+                               Specificity = b$specificities)
+    
+    PlotA <- ggplot(data = ROCdata,
+                    mapping = aes(x = 1-Specificity,
+                                  y = Sensitivity)) +
+      geom_line() +
+      ggtitle("ROC Curve of Training Set") +
+      geom_text(mapping = aes(x = 0.75,
+                              y = 0.3,
+                              label = paste("AUC = ",
+                                            a$auc,
+                                            sep = ""))) +
+      ylab("True Positive Rate") +
+      xlab("False Positive Rate")
+  
+    PlotB <- ggplot(data = ROCdata_test,
+                    mapping = aes(x = 1-Specificity,
+                                  y = Sensitivity)) +
+      geom_line() +
+      ggtitle("ROC Curve of Testing Set") +
+      geom_text(mapping = aes(x = 0.75,
+                              y = 0.3,
+                              label = paste("AUC = ",
+                                            b$auc,
+                                            sep = ""))) +
+      ylab("True Positive Rate") +
+      xlab("False Positive Rate")
+    
+    grid.arrange(PlotA,
+                 PlotB,
+                 ncol = 2, nrow =1, widths = c(1/2, 1/2))
+  },
+  height = 400,
+  width = 800)
 }  
   
   
 
-shinyApp(ui1, server2)
+shinyApp(ui3, server2)
+
 
 
