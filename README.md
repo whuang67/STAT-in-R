@@ -1,6 +1,6 @@
 # STAT-in-R
 
-This repository contains the codes from the following courses:
+This repository contains the codes (assignments, project, miscellanies) from the following courses:
 
 * STAT 430 Basic of Statistical Learning
 * STAT 542 Statistical Learning
