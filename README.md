@@ -7,4 +7,4 @@ This repository contains the codes (assignments, project, miscellanies) from the
 * STAT 578 Time Series Forecasting
 * Extracurricular Projects and Codes
 
-The language of this repository is [R](https://www.rstudio.com/) (including Rmarkdown)
+The language of this repository is [R (including Rmarkdown)](https://www.rstudio.com/).
