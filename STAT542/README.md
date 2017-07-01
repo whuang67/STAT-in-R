@@ -19,8 +19,12 @@ The packages above may not include all packages since R has so many packages tha
 
 I highly recommend you choose [RStudio](https://www.rstudio.com/) which makes R easier to use and includes a code editor, debugging & visualization tools.
 
-## Data
+### Data
 
 Please click [here](https://www.kaggle.com/c/allstate-claims-severity/data) to have access to the datasets.
 
 Each row in this dataset represents an insurance claim. We would like to predict the value for the 'loss' column. All predictors are anonymous and we only have access to their variable types. Variables prefaced with `cat` are categorical, while those prefaced with `cont` are continuous.
+
+## Assignments
+
+For the course of STAT 542, there are four assignments which covers basically all Machine Learning Algorithms in total. These assignments also require **R**.
