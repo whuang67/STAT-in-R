@@ -21,4 +21,6 @@ I highly recommend you choose [RStudio](https://www.rstudio.com/) which makes R 
 
 ## Data
 
+Please click [here](https://www.kaggle.com/c/allstate-claims-severity/data) to have access to the datasets.
+
 Each row in this dataset represents an insurance claim. We would like to predict the value for the 'loss' column. All predictors are anonymous and we only have access to their variable types. Variables prefaced with `cat` are categorical, while those prefaced with `cont` are continuous.
