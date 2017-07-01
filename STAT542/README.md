@@ -15,6 +15,10 @@ This project requires **R** and the following R libraries installed:
 - [MASS](https://cran.r-project.org/web/packages/MASS/index.html)
 - [cluster](https://cran.r-project.org/web/packages/cluster/index.html)
 
-The packages above may not include all packages since R has so many packages that are available online and free. `install.packages("ggplot2")` would be extremely helpful (`'ggplot2'` can be changed to any package that you would like to install)!
+The packages above may not include all packages since R has so many packages that are available online and free. `install.packages("ggplot2")` would be extremely helpful (`'ggplot2'`) can be changed to any package that you would like to install)!
 
 I highly recommend you choose [RStudio](https://www.rstudio.com/) which makes R easier to use and includes a code editor, debugging & visualization tools.
+
+## Data
+
+Each row in this dataset represents an insurance claim. We would like to predict the value for the 'loss' column. All predictors are anonymous and we only have access to their variable types. Variables prefaced with `cat` are categorical, while those prefaced with `cont` are continuous.
