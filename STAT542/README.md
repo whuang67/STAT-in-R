@@ -28,3 +28,7 @@ Each row in this dataset represents an insurance claim. We would like to predict
 ## Assignments
 
 For the course of STAT 542, there are four assignments which covers basically all Machine Learning Algorithms in total. These assignments also require **R**.
+
+## Course Materials
+
+The folder [Course](https://github.com/whuang67/STAT-in-R/tree/master/STAT542/Course) contains part of the supporting files for this project and assignments.
