@@ -43,3 +43,7 @@ After employing ticket scanners in 2016, KCPA increased and improved its data co
 11) `Quantity Purchase`: how many tickets each customer purchased for one event (Continuous);
 12) `Quantity Purchase Total`: summarized how many tickets each customer purchased (Continuous);
 12) `Event Purchase Total`: for each customer, how many different events did they purchase (Continuous).
+
+**Target Variable**
+
+`Redeemed`: {Yes - 1, No - 0} (Binary classification)
