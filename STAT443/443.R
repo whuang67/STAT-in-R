@@ -10,6 +10,16 @@ general_plot <- function(variable){
     ggtitle(variable)
 }
 
+dat$Date <- as.Date(paste(dat$year, dat$month, dat$day, sep="-"))
+dat$weekday <- weekdays(dat$Date)
+
+ggplot(data = dat) +
+  geom_boxplot(mapping = aes(x = weekday,
+                             y = PM_US.Post)) +
+  facet_grid(as.factor(year)~.)
+
+
+
 #### Responses
 general_plot("PM_Jingan")
 general_plot("PM_US.Post")
@@ -81,28 +91,86 @@ dat1 <- dat[is.na(dat$PM_US.Post) == FALSE, ]
 ### New variables
 
 ### Inpute
-dat1$DEWP[is.na(dat1$DEWP)] <- mean(dat1$DEWP, na.rm=TRUE)
-dat1$HUMI[is.na(dat1$HUMI)] <- mean(dat1$HUMI, na.rm=TRUE)
-dat1$PRES[is.na(dat1$PRES)] <- mean(dat1$PRES, na.rm=TRUE)
-dat1$TEMP[is.na(dat1$TEMP)] <- mean(dat1$TEMP, na.rm=TRUE)
+# dat1$DEWP[is.na(dat1$DEWP)] <- mean(dat1$DEWP, na.rm=TRUE)
+# dat1$HUMI[is.na(dat1$HUMI)] <- mean(dat1$HUMI, na.rm=TRUE)
+# dat1$PRES[is.na(dat1$PRES)] <- mean(dat1$PRES, na.rm=TRUE)
+# dat1$TEMP[is.na(dat1$TEMP)] <- mean(dat1$TEMP, na.rm=TRUE)
+
+dat1$DEWP[is.na(dat1$DEWP)] <- median(dat1$DEWP, na.rm=TRUE)
+dat1$HUMI[is.na(dat1$HUMI)] <- median(dat1$HUMI, na.rm=TRUE)
+dat1$PRES[is.na(dat1$PRES)] <- median(dat1$PRES, na.rm=TRUE)
+dat1$TEMP[is.na(dat1$TEMP)] <- median(dat1$TEMP, na.rm=TRUE)
+
 
 dat1$cbwd <- as.character(dat1$cbwd)
 dat1$cbwd[is.na(dat1$cbwd)] <- "NE"
 dat1$cbwd <- as.factor(dat1$cbwd)
 
-dat1$Iws[is.na(dat1$Iws)] <- mean(dat1$Iws, na.rm=TRUE)
-dat1$precipitation[is.na(dat1$precipitation)] <- mean(dat1$precipitation, na.rm=TRUE)
-dat1$Iprec[is.na(dat1$Iprec)] <- mean(dat1$Iprec, na.rm=TRUE)
+# dat1$Iws[is.na(dat1$Iws)] <- mean(dat1$Iws, na.rm=TRUE)
+# dat1$precipitation[is.na(dat1$precipitation)] <- mean(dat1$precipitation, na.rm=TRUE)
+# dat1$Iprec[is.na(dat1$Iprec)] <- mean(dat1$Iprec, na.rm=TRUE)
+
+dat1$Iws[is.na(dat1$Iws)] <- median(dat1$Iws, na.rm=TRUE)
+dat1$precipitation[is.na(dat1$precipitation)] <- median(dat1$precipitation, na.rm=TRUE)
+dat1$Iprec[is.na(dat1$Iprec)] <- median(dat1$Iprec, na.rm=TRUE)
+
+
+### Train test split
+set.seed(1)
+idx <- sample(1:nrow(dat1), nrow(dat1)*0.8)
+train_dat <- dat1[idx, ]
+test_dat <- dat1[-idx, ]
 
 ## Linear Regression
 model_1 <- lm(PM_US.Post ~ DEWP + HUMI + PRES + TEMP + Iws + as.factor(cbwd) +
                 precipitation + Iprec + as.factor(month) + as.factor(hour) +
-                as.factor(day), data = dat1)
+                weekday, data = train_dat)
 par(mfrow = c(2,2))
 plot(model_1)
 library(MASS)
 boxcox(model_1)
 
+library(faraway)
+vif(model_1)
+model_reduced <- lm(PM_US.Post ~ HUMI + PRES + TEMP + Iws + as.factor(cbwd) +
+                      precipitation + Iprec + as.factor(month) + as.factor(hour) +
+                      weekday, data = train_dat)
+vif(model_reduced)
+
+
+model_reduced_1 <- lm(PM_US.Post ~ HUMI + PRES + Iws + as.factor(cbwd) +
+                       precipitation + Iprec + as.factor(month) + as.factor(hour) +
+                       weekday, data = train_dat)
+vif(model_reduced_1)
+par(mfrow = c(2,2))
+plot(model_reduced_1)
+
+summary(model_reduced_1)
+get_RMSE(train_dat$PM_US.Post, predict(model_reduced_1))
+get_RMSE(test_dat$PM_US.Post, predict(model_reduced_1, test_dat))
+
+boxcox(model_reduced_1)
+
+
+model_reduced_2 <- lm(PM_US.Post^.2 ~ HUMI + PRES + Iws + as.factor(cbwd) +
+                        precipitation + Iprec + as.factor(month) + as.factor(hour) +
+                        weekday, data = train_dat)
+par(mfrow = c(2,2))
+plot(model_reduced_2)
+summary(model_reduced_2)
+get_RMSE(train_dat$PM_US.Post, predict(model_reduced_2)^5)
+get_RMSE(test_dat$PM_US.Post, predict(model_reduced_2, test_dat)^5)
+
+
+
+##################################################################################
+
+
+
+
+
+
+####################################################3
 model_2 <- lm(log(PM_US.Post) ~ DEWP + HUMI + PRES + TEMP + Iws + as.factor(cbwd) +
                 precipitation + Iprec + as.factor(month) + as.factor(hour) +
                 as.factor(day), data = dat1)
@@ -125,6 +193,7 @@ summary(model_2)
 summary(model_3)
 summary(model_4)
 
+
 get_RMSE(dat1$PM_US.Post, predict(model_1, dat1))
 get_RMSE(dat1$PM_US.Post, exp(predict(model_2, dat1)))
 get_RMSE(dat1$PM_US.Post, (predict(model_3, dat1))^2)
@@ -134,7 +203,7 @@ get_RMSE(dat1$PM_US.Post, (predict(model_4, dat1))^5)
 
 model_11 <- lm(PM_US.Post ~ DEWP + HUMI + PRES + TEMP + log(Iws+1) + as.factor(cbwd) +
                 log(precipitation+1) + log(Iprec+1) + as.factor(month) + as.factor(hour) +
-                as.factor(day), data = dat1)
+                weekday, data = dat1)
 par(mfrow = c(2,2))
 plot(model_11)
 boxcox(model_11)
