@@ -1,0 +1,373 @@
+---
+title: 'STAT 428: Homework 5: <br> Chapter 7 and Chapters 8'
+author: "Huang, Wenke (whuang67)"
+date: "Due Week 11, Friday Nov 10 by 5:59 PM on Compass"
+output:
+  html_document:
+    theme: readable
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+---------------------------------------
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+options(scipen = 1, digits = 4, width = 80)
+library(knitr)
+opts_chunk$set(echo=TRUE,
+               cache=TRUE, autodep=TRUE, cache.comments=FALSE,
+               message=FALSE, warning=FALSE)
+```
+
+
+---------------------------------------
+
+Please refer to the [**detailed homework policy document**](https://compass2g.illinois.edu/bbcswebdav/courses/stat_428_120178_156204/1_Info/Syllabus/homework_policy.html) on Course Page for information about homework formatting, submission, and grading. 
+
+---------------------------------------
+
+# Assignment
+
+---------------------------------------
+
+## Exercise 1: Bootstrap
+
+Assume we have following observations: $X=c(40,20,30,25,11,55,89,35,22,79,44,74,97)$. Please  answer following questions with R code.
+
+  1. Estimate the mean of observations. Then, Use bootstrap to estimate the standard error of the mean.
+  
+  2. Calculate a 95\% confidence interval for the estimate of mean (based on bootstrap).
+
+### Solution 1.1
+
+```{r}
+set.seed(671105713)
+
+X=c(40,20,30,25,11,55,89,35,22,79,44,74,97)
+mean(X)
+
+Tboot <- numeric(1000)
+for(i in 1:1000){
+  xb <- sample(X, 13, replace=TRUE)
+  Tboot[i] <- mean(xb)
+}
+
+sd(Tboot)
+```
+
+### Solution 1.2
+
+```{r}
+critical_val <- qnorm(1-0.05/2)
+c(mean(X) - critical_val * sd(Tboot),
+  mean(X) + critical_val * sd(Tboot))
+```
+
+
+
+
+## Exercise 2: Jackknife
+Write an R function called `jackknife`. The function should accept two arguments: $x$ (the data) and $theta$ (a function which produces the estimate, when applied to $x$). The function `jackkife` should return a list with the following components:
+
+  * bias - the jacknife estimate of bias
+  
+  * se - the jacknife estimate of standard error
+  
+(Please make sure your function is shown in the html file) 
+
+### Solution 2
+
+```{r}
+jackknife <- function(x, theta=mean){
+  n <- length(x)
+  
+  thetahat <- theta(x)
+  thetahatjack <- numeric(n)
+  for(i in 1:n){
+    thetahatjack[i] <- theta(x[-i])
+  }
+  
+  biasjack <- (n-1)*(mean(thetahatjack)-thetahat)
+  sumsq <- sum((thetahatjack-mean(thetahatjack))^2)
+  sejack <- sqrt((n-1)/n)*sqrt(sumsq)
+  return(list(bias = biasjack, se = sejack))
+}
+
+## test the performance
+jackknife(x=X, theta=mean)
+```
+
+
+## Exercise 3
+7.1
+
+### Solution 3
+
+```{r}
+library(bootstrap)
+thetahat <- cor(law$LSAT, law$GPA)
+
+n <- nrow(law)
+thetahatjack <- numeric(n)
+for(i in 1:n){
+  thetahatjack[i] <- cor(law$LSAT[-i], law$GPA[-i])
+}
+biasjack <- (n-1) * (mean(thetahatjack)-thetahat)
+biasjack
+
+sumsq <- sum((thetahatjack - mean(thetahatjack))^2)
+sejack <- sqrt((n-1)/n) * sqrt(sumsq)
+sejack
+```
+
+A jackknife estimate of the bias and the standard error of the correlation statistic in Example 7.2 are `r biasjack` and `r sejack`, respectively.
+
+## Exercise 4
+7.3
+
+### Solution 4
+
+```{r}
+boot.t.ci <- function(x, B = 500, R = 100, level = .95, statistic){
+  #compute the bootstrap t CI
+  x <- as.matrix(x); n <- nrow(x)
+  stat <- numeric(B); se <- numeric(B)
+  
+  boot.se <- function(x, R, f){
+    #local function to compute the bootstrap
+    #estimate of standard error for statistic f(x)
+    x <- as.matrix(x); m <- nrow(x)
+    th <- replicate(R, expr = {
+      i <- sample(1:m, size = m, replace = TRUE)
+      f(x[i, ])
+    })
+    return(sd(th))
+  }
+  
+  for (b in 1:B){
+    j <- sample(1:n, size = n, replace = TRUE)
+    y <- x[j, ]
+    stat[b] <- statistic(y)
+    se[b] <- boot.se(y, R = R, f = statistic)
+  }
+  
+  stat0 <- statistic(x)
+  t.stats <- (stat - stat0) / se
+  se0 <- sd(stat)
+  alpha <- 1 - level
+  Qt <- quantile(t.stats, c(alpha/2, 1-alpha/2), type = 1)
+  names(Qt) <- rev(names(Qt))
+  CI <- rev(stat0 - Qt * se0)
+}
+
+dat <- law
+stat <- function(dat) cor(dat[, 1], dat[, 2])
+ci <- boot.t.ci(dat, statistic=stat, B=2000, R=200)
+ci
+```
+
+Here, we notice that 95% t confidence interval is listed above. The function `boot.t.ci` is borrowed from the text book Example 7.12.
+
+## Exercise 5
+7.5
+
+### Solution 5
+
+```{r}
+library(boot)
+dat <- aircondit$hours
+exercise5 <- boot(data = dat,
+                  statistic = function(dat, ind) mean(dat[ind]),
+                  R = 2000)
+boot.ci(exercise5, type = "all")
+```
+
+These four methods are using four different formulas to approach the confidence intervals.
+
+The **standard normal** method has made several assumptions. We assume that the distribution of $\hat{\theta}$ is normal or $\hat{\theta}$ is a sample mean and the sample size is large to apply the normal distribution. We also assume that $\hat{\theta}$ is unbiased for $\theta$. Also, we treat $se(\hat{\theta})$ which is estimated as a known parameter. The **basic** method is using the quantiles of replicates $\hat{\theta}^*$ instead of the normal distribution assumption. This method still treats $\hat{\theta}$ as the center of the confidence interval. The **percentile** method is also considering the quantiles of replicates $\hat{\theta}^*$. Unlike the basic one, $\hat{\theta}_{\alpha/2}$ and $\hat{\theta}_{1-\alpha/2}$ are treated as lower and upper bounds respectively. The **BCa** method is a better method because it takes both skewness and bias into consideration. 
+
+## Exercise 6
+7.7
+
+
+### Solution 6
+
+```{r}
+n <- nrow(scor)
+B <- 1000
+R <- numeric(B)
+for(b in 1:B){
+  i <- sample(1:n, n, replace=TRUE)
+  lambda <- eigen(cov(scor[i,]))$values
+  R[b] <- lambda[1] / sum(lambda)
+}
+lambda_ <- eigen(cov(scor))$values
+theta_ <- lambda_[1] / sum(lambda_)
+
+## Bootstrap Bias
+mean(R) - theta_
+
+## Bootstrap Standard Deviation
+sd(R)
+```
+
+The bias and standard error of $\hat{\theta}$ are `r mean(R)-theta_` and `r sd(R)`, respectively.
+
+
+## Exercise 7
+7.9
+
+### Solution 7
+
+```{r}
+find_theta <- function(dat, ind){
+  n <- nrow(dat)
+  lambda <- eigen(cov(dat[ind, ]))$values
+  return(lambda[1] / sum(lambda))
+}
+
+exercise7_result <- boot(data = scor,
+                         statistic = find_theta,
+                         R = 1000)
+boot.ci(exercise7_result, type = c("perc", "bca"))
+```
+
+The percentile and BCa confidence intervals are shown above.
+
+## Exercise 8
+7.11
+
+### Solution 8
+
+```{r}
+library(DAAG)
+n <- nrow(ironslag)
+e1 <- e2 <- e3 <- e4 <- numeric(n*(n-1)/2)
+
+get_MSE <- function(actual, predicted) mean((actual-predicted)^2)
+count = 1
+for(i in 1:(n-1)){
+  for(j in (i+1):n){
+    x <- ironslag$magnetic[-c(i, j)]
+    y <- ironslag$chemical[-c(i, j)]
+    
+    J1 <- lm(y ~ x)
+    pred = J1$coefficients[1] + J1$coefficients[2] * ironslag$magnetic[c(i, j)]
+    e1[count] = get_MSE(ironslag$chemical[c(i, j)], pred)
+    
+    J2 <- lm(y ~ x + I(x^2))
+    pred = J2$coefficients[1] + J2$coefficients[2] * ironslag$magnetic[c(i, j)] +
+      J2$coefficients[3] * ironslag$magnetic[c(i, j)]^2
+    e2[count] = get_MSE(ironslag$chemical[c(i, j)], pred)
+    
+    J3 <- lm(log(y) ~ x)
+    pred = exp(J3$coefficients[1] + J3$coefficients[2] * ironslag$magnetic[c(i, j)])
+    e3[count] = get_MSE(ironslag$chemical[c(i, j)], pred)
+    
+    J4 <- lm(log(y) ~ log(x))
+    pred = exp(J4$coefficients[1] + J4$coefficients[2] * log(ironslag$magnetic[c(i, j)]))
+    e4[count] = get_MSE(ironslag$chemical[c(i, j)], pred)
+    
+    count = count+1
+  }
+}
+
+c(mean(e1), mean(e2), mean(e3), mean(e4))
+```
+
+Based on the result here, the model `lm(y ~ x)` has the lowest cross-validation error and will be used as our final model.
+
+```{r}
+model <- lm(chemical ~ magnetic, data = ironslag)
+summary(lm(chemical ~ magnetic, data = ironslag))
+```
+
+## Exercise 9
+8.1
+
+### Solution 9
+
+```{r}
+x <- sort(as.vector(chickwts$weight[chickwts$feed == "soybean"]))
+y <- sort(as.vector(chickwts$weight[chickwts$feed == "linseed"]))
+m <- length(x); n <- length(y)
+Fn <- ecdf(x); Gm <- ecdf(y)
+CvM <- m*n/(m+n)^2*(sum((Fn(x) - Gm(x))^2) + sum((Fn(y) - Gm(y))^2))
+
+z <- c(x, y)
+D <- numeric(999)
+for(i in 1:999){
+  k <- sample(1:26, 14, replace=FALSE)
+  x1 <- sort(z[k])
+  y1 <- sort(z[-k])
+  Fn <- ecdf(x); Gm <- ecdf(y)
+  D[i] <- m*n/(m+n)^2*(sum((Fn(x1) - Gm(x1))^2) + sum((Fn(y1) - Gm(y1))^2))
+}
+
+p <- mean(c(CvM, D) > CvM)
+p
+```
+
+$H_0$: Two distributions are the same.  
+$H_A$: Two distributions are different.
+
+The approximate ASL `r p` does not support the alternative hypothesis that distributions differ.
+
+## Exercise 10
+8.3
+
+### Solution 10
+
+```{r}
+count5test_unequal <- function(x, y, C, alpha=0.05){
+
+  z <- c(x, y)
+  n <- length(z)
+  k <- sample(1:n, length(x), replace=FALSE)
+  
+  x1 <- z[k]
+  y1 <- z[-k]
+  outx <- sum(x1 > max(y1)) + sum(x1 < min(y1))
+  outy <- sum(y1 > max(x1)) + sum(y1 < min(x1))
+  
+  return(max(c(outx, outy)))
+}
+
+### Test 1
+x <- rnorm(30, 0, 1)
+y <- rnorm(20, 0, 2)
+outx <- sum(x > max(y)) + sum(x < min(y))
+outy <- sum(y > max(x)) + sum(y < min(x))
+C <- max(outx, outy)
+
+tests <- replicate(10000, expr = {
+  x_ <- x-mean(x)
+  y_ <- y-mean(y)
+  count5test_unequal(x_, y_, C = C)
+})
+
+mean(c(C, tests)>C)
+```
+
+Test 1 shows that the p value is less than 0.05. It is statistically significant. We reject the null hypothesis of same variance. The variances of these two distribution are different.
+
+```{r}
+### Test 2
+x <- rnorm(30, 0, 1)
+y <- rnorm(20, 0, 1)
+outx <- sum(x > max(y)) + sum(x < min(y))
+outy <- sum(y > max(x)) + sum(y < min(x))
+C <- max(outx, outy)
+
+tests <- replicate(10000, expr = {
+  x_ <- x-mean(x)
+  y_ <- y-mean(y)
+  count5test_unequal(x_, y_, C = C)
+})
+
+mean(c(C, tests)>C)
+```
+
+Test 2 shows that the p value is greater than 0.05. It is not statistically significant. We cannot reject the null hypothesis of same variance. The variances of these two distribution are the same.
+
+
