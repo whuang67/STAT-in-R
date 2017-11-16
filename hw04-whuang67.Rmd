@@ -1,0 +1,347 @@
+---
+title: 'STAT 428: Homework 4: <br> Chapter 5 and Chapters 6'
+author: "Huang, Wenke, whuang67"
+date: "Due Week 9, Friday Oct 27 by 5:59 PM on Compass"
+output:
+  html_document:
+    theme: readable
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+---------------------------------------
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+options(scipen = 1, digits = 4, width = 80)
+library(knitr)
+opts_chunk$set(echo=TRUE,
+               cache=TRUE, autodep=TRUE, cache.comments=FALSE,
+               message=FALSE, warning=FALSE)
+```
+
+
+---------------------------------------
+
+Please refer to the [**detailed homework policy document**](https://compass2g.illinois.edu/bbcswebdav/courses/stat_428_120178_156204/1_Info/Syllabus/homework_policy.html) on Course Page for information about homework formatting, submission, and grading. 
+
+---------------------------------------
+
+# Assignment
+
+---------------------------------------
+
+## Exercise 1 Antithetic and control variables
+
+Suppose $X$ and $Y$ are two random variables with finite variance, and both of their expected value are $\mu$, $E(X)=E(Y)=\mu$. Also, the correlation $\rho$ between $X$ and $Y$ satisfies either $0<\rho<1$ or $-1<\rho<0$. Then, we define random variable $Z$:
+\[Z=bX+(1-b)Y,\]
+where $b$ is a constant. Please show that we can always find a proper constant $b$ so that $Z$ has smaller variance than $X$.
+
+### Solution 1
+
+$Var(Z)-Var(X)$
+
+$=(b^2-1)Var(X) + (1-b)^2Var(Y) + 2b(1-b)Cov(X,Y)$
+
+$\leq(b^2-1)Var(X) + (1-b)^2Var(Y) + 2b(1-b)\sqrt{Var(X)Var(Y)}$
+
+$=[(b+1)Var(X)-(b-1)Var(Y)][(b-1)Var(X)-(b-1)Var(Y)]$
+
+The result above indicates that when it is equal to zero and $b^2-1<0$, we are able to find a constant to make this equation less than 0. Hence, it shows that we can find a constant to make $Var(Z) < Var(X)$.
+
+## Exercise 2: Bayesian statistics
+Let $X_1,\ldots,X_n$ be $n$ independent and identical distributed random variables from $N(\theta,1)$, where $\theta$ is the unknown parameter. We assume the prior distribution on $\theta$ is Cauchy distribution $Cauchy(0,1)$. 
+
+1. Please write down the posterior distribution of $\theta$. (Hint: refer to the lecture slides W5.3)
+
+### Solution 2.1
+
+$\displaystyle f(x, \theta) =\frac{1}{\sqrt{2\pi}} e^{-\frac{(x-\theta)^2}{2}} \frac{1}{\pi} \frac{1}{(1+\theta)^2}$
+
+$\displaystyle f(x) =\int \frac{1}{\sqrt{2\pi}} e^{-\frac{(x-\theta)^2}{2}} \frac{1}{\pi} \frac{1}{(1+\theta)^2} d\theta$
+
+$\displaystyle f(\theta|x) = \frac{e^{-\frac{(x-\theta)^2}{2}} \frac{1}{(1+\theta)^2}}{\int e^{-\frac{(x-\theta)^2}{2}} \frac{1}{(1+\theta)^2} d\theta}$
+
+2. Suppose $n=3$ and we observe that $x_1=1.6, x_2=-0.7, x_3=0.5$. Please estimate the posterior mean of $\theta$ based on $1000$ simulated $\theta$ from its prior distribution. (Hint: refer to the lecture slides W5.3)
+
+### Solution 2.2
+
+```{r}
+poster_mean <- function(x, m = 1000){
+  set.seed(671105713)
+  theta <- rcauchy(m)
+  h <- pi*exp(-0.5 * (x-theta)^2)
+  return(mean(theta*h)/mean(h))
+}
+sapply(c(1.6, -0.7, 0.5), FUN = poster_mean)
+```
+
+3. Suppose $n=3$ and we observe that $x_1=1.6, x_2=-0.7, x_3=0.5$.
+
+    a. Design an acceptance-rejection sampling algorithm to generate $1000$ (accepted) samples of $\theta$ from the posterior distribution of $\theta$. Write down your algorithm with your instrumental distribution $g(\theta)$. (Hint: for acceptance-rejection sampling method, the normalizing constant in the posterior distribution can be ignored, why? )
+    
+    b. Implement your acceptance-rejection sampling algorithm with R code. Plot the histogram of your generated sample and compare your sample mean with your estimated posterior mean obatained in Ex.2.2.
+
+### Solution 2.3
+
+Normalizing constant is a constant even though it is unknown. We can considered ignore it since it can also be timed to the instrumental distrumental distribution.
+
+Here, we set $g(\theta) \sim N(0, 1)$. 
+
+```{r}
+Acceptance_Rejection <- function(x, n = 1000){
+  set.seed(671105713)
+  output = rep(NA, n)
+  i = 1
+  while(i<=n){
+    u <- runif(1)
+    q <- runif(1)
+    theta <- qnorm(q)
+    
+    if(u < (exp(-0.5*(x-theta)^2)/(1+ theta^2)) / exp(-theta^2/2)){
+      output[i] = theta
+      i = i+1
+    }
+  }
+  return(output)
+}
+
+library(ggplot2)
+result = Acceptance_Rejection(x = 1.6)
+ggplot() +
+  geom_histogram(mapping = aes(x = result)) +
+  ggtitle("x = 1.6")
+result = Acceptance_Rejection(x = -0.7)
+ggplot() +
+  geom_histogram(mapping = aes(x = result)) +
+  ggtitle("x = -0.7")
+result = Acceptance_Rejection(x = 0.5)
+ggplot() +
+  geom_histogram(mapping = aes(x = result)) +
+  ggtitle("x = 0.5")
+```
+
+
+## Exercise 3
+6.1
+
+### Solution 3
+
+```{r}
+MSE_Cauchy <- function(x, n = 20, m = 1000){
+  set.seed(1)
+  tmean <- rep(NA, m)
+  for(i in 1:m){
+    val <- sort(rcauchy(n))
+    tmean[i] <- sum(val[(1+x):(n-x)])/(n-2*x)
+  }
+  return(mean(tmean^2))
+}
+sapply(X=seq(1:9), FUN = MSE_Cauchy)
+```
+
+
+## Exercise 4
+6.3
+
+### Solution 4
+
+```{r}
+power_curve <- function(n=20){
+  set.seed(671105713)
+  # n <- 20
+  m <- 1000
+  mu0 <- 500
+  sigma <- 100
+  mu <- c(seq(450, 650, 10)) #alternatives
+  M <- length(mu)
+  power <- numeric(M)
+  for (i in 1:M){
+    mu1 <- mu[i]
+    pvalues <- replicate(m, expr = {
+      #simulate under alternative mu1
+      x <- rnorm(n, mean = mu1, sd = sigma)
+      ttest <- t.test(x,
+                      alternative = "greater", mu = mu0)
+      ttest$p.value } )
+    power[i] <- mean(pvalues <= .05)
+  }
+  return(power)
+}
+
+ggplot(mapping = aes(x=seq(450, 650, 10))) +
+  geom_line(mapping = aes(y=power_curve(n=10),
+                          color="10")) +
+  geom_line(mapping = aes(y=power_curve(),
+                          color="20")) +
+  geom_line(mapping = aes(y=power_curve(n=30),
+                          color="30")) +
+  geom_line(mapping = aes(y=power_curve(n=40),
+                          color="40")) +
+  geom_line(mapping = aes(y=power_curve(n=50),
+                          color="50")) +
+  xlab(expression(mu)) + ylab("power") + labs(color="sample size")
+```
+
+The plot is shown above. We found out that the bigger the sample size is, the steeper the curve is (the faster the power goes towards 1). 
+
+## Exercise 5
+
+6.5
+
+### Solution 5
+
+```{r}
+n <- 20
+alpha <- 0.05
+UCL <- replicate(1000, expr = {
+  x <- rchisq(n, df=2)
+  (n-1)*var(x)/qchisq(alpha, n-1)
+})
+
+UCL_64 <- replicate(1000, expr = {
+  x <- rnorm(n, mean=0, sd=2)
+  (n-1) * var(x) / qchisq(alpha, df=n-1)
+})
+
+# sum(UCL>4)
+mean(UCL>4)
+mean(UCL_64>4)
+```
+
+The results above show that it is much worse than that of example 6.4. The result from example 6.4 is basically equal to the confidence level 0.95 while the result from this question is far away from 0.95.
+
+## Exercise 6
+
+6.7
+
+### Solution 6
+
+```{r}
+sk <- function(x){
+  #computes the sample skewness coeff.
+  xbar <- mean(x)
+  m3 <- mean((x - xbar)^3)
+  m2 <- mean((x - xbar)^2)
+  return( m3 / m2^1.5 )
+}
+
+a <- 1
+alpha <- 0.05
+n <- 30
+m <- 2500
+epsilon <- c(seq(0, .15, .01), seq(.15, 1, .05))
+cv <- qnorm(1-alpha/2, 0, sqrt(6*(n-2) / ((n+1)*(n+3))))
+
+skewtest <- numeric(length(epsilon))
+for(i in 1:length(epsilon)){
+  e <- epsilon[i]
+  test <- numeric(m)
+  for(j in 1:m){
+    a <- sample(c(1, 10), replace=TRUE, size=n, prob=c(1-e, e))
+    x <- rbeta(n, a, a)
+    test[j] <- as.integer(abs(sk(x)) >= cv)
+  }
+  skewtest[i] <- mean(test)
+}
+
+ggplot(mapping = aes(x=seq(0, 1, length.out=length(epsilon)))) +
+  geom_line(mapping = aes(y=skewtest)) +
+  ggtitle("Symmetric Beta") + xlab(expression(epsilon))
+
+skewtest_ <- numeric(length(epsilon))
+for(i in 1:length(epsilon)){
+  e <- epsilon[i]
+  test <- numeric(m)
+  for(j in 1:m){
+    a <- sample(c(1, 10), replace=TRUE, size=n, prob=c(1-e, e))
+    x <- rt(n, a)
+    test[j] <- as.integer(abs(sk(x)) >= cv)
+  }
+  skewtest_[i] <- mean(test)
+}
+
+ggplot(mapping = aes(x=seq(0, 1, length.out=length(epsilon)))) +
+  geom_line(mapping = aes(y=skewtest_)) +
+  ggtitle("T distribution") + xlab(expression(epsilon))
+```
+
+From the trend plots above, we can read that they are different. For plot of symmetric beta, the power will go up when $\epsilon$ goes greater than 0.6, and then drop down when $\epsilon$ reaches around 0.9. For the plot of t, the power will go down graduately at the beginning. After $\epsilon$ reaches 0.8, the power will go down dramatically. 
+
+## Exercise 7
+
+6.9
+
+### Solution 7
+
+```{r}
+set.seed(671105713)
+question_7 <- function(n=1000, distribution="Lognormal"){
+  if(distribution=="Lognormal"){
+    x <- rlnorm(n)
+  } else if(distribution=="uniform"){
+    x <- runif(n)
+  } else if(distribution=="Bernoulli"){
+    x <- rbinom(n, 1, 0.1)
+  }
+  x <- sort(x)
+  x_bar <- mean(x)
+  sum_result <- array(NA, dim=n)
+  for(i in 1:n){
+    sum_result[i] <- (2*i-n-1)*x[i]
+  }
+  return(list(sum(sum_result)/(n^2*x_bar), x))
+}
+
+### Lognormal
+output <- question_7()
+output[[1]]
+ggplot() +
+  geom_histogram(mapping = aes(x = output[[2]],
+                               y = ..density..)) +
+  ggtitle("Density Histogram of Lognormal Distribution") +
+  xlab("x")
+
+### Uniform
+output <- question_7(distribution="uniform")
+output[[1]]
+ggplot() +
+  geom_histogram(mapping = aes(x = output[[2]],
+                               y = ..density..)) +
+  ggtitle("Density Histogram of Uniform Distribution") +
+  xlab("x")
+
+### Bernoulli
+output <- question_7(distribution="Bernoulli")
+output[[1]]
+ggplot() +
+  geom_bar(mapping = aes(x = output[[2]],
+                         y = ..density..),
+           stat="bin") +
+  ggtitle("Density Histogram of Binomial Distribution") +
+  xlab("x")
+```
+
+## Exercise 8
+
+6.10
+
+### Solution 8
+
+```{r}
+erf <- function(x) 2 * pnorm(x * sqrt(2)) - 1
+erf(0.5)
+
+n <- 1000
+output <- array(NA, n)
+set.seed(671105713)
+for(i in 1:n){
+  output[i] <- question_7()[[1]]
+}
+
+sd <- sqrt(mean((output-mean(output))^2))
+cdf <- mean(output)
+c(cdf - 1.96*sd, cdf + 1.96*sd) #### 95% Confidence Interval
+
+UCL <- mean((output >= cdf - 1.96*sd) & (output <= cdf + 1.96*sd))
+UCL
+```
