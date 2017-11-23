@@ -83,7 +83,7 @@ plt.plot(np.arange(5), cv_errors); plt.show()
 from sklearn.ensemble import RandomForestRegressor
 n = 200; p = 20
 X = np.random.multivariate_normal(np.zeros(p), np.identity(p), n)
-# y = np.sum(X, axis = 1) + np.random.normal(size=n)
+# y = 1 + np.matmul(X[:, 0:4], np.array([0.5, 0.5, 0.5, 0.5])) + np.random.normal(size=n)
 
 y_real = np.zeros(shape = (n, p)); y_pred = np.zeros(shape = (n, p))
 cov_matrix = np.zeros(shape=(4, 4))
@@ -91,8 +91,10 @@ mtry = [2, 3, 4, 5]; nodesize = [1, 2, 3, 4]
 for i in range(4):
     for j in range(4):
         for k in range(20):
-            y_real[:, k] = np.sum(X, axis=1) + np.random.normal(size=n)
+            y_real[:, k] = 1 + np.matmul(X[:, 0:4],
+                  np.array([0.5, 0.5, 0.5, 0.5])) + np.random.normal(size=n)
             reg = RandomForestRegressor(
+                    n_estimators = 10,
                     min_samples_leaf = mtry[i],
                     max_features = nodesize[j]).fit(X, y_real[:, k])
             y_pred[:, k] = reg.predict(X)
@@ -101,7 +103,7 @@ for i in range(4):
 print(cov_matrix)
 
 ###### b ###################################
-for i in [10, 20, 30, 40, 100, 500]:
+for i in [10, 50, 100, 200, 300, 500]:
     y_real = np.sum(X, axis=1) + np.random.normal(size=n)
     reg = RandomForestRegressor(n_estimators=i).fit(X, y_real)
     y_pred = reg.predict(X)
