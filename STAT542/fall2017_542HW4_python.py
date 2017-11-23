@@ -13,16 +13,23 @@ import numpy as np
 ###### a ###################################
 def get_RMSE(y, y_pred): return (np.mean((y-y_pred)**2))**.5
 
-def NadarayaWatsonRegressor(train_X, train_y, test_X, bandwidth=1):
-    def Gaussian_kernal(x1, x2, bandwidth):
-        return np.exp(-np.sum(((x1-x2)/bandwidth)**2)) / (2*np.pi)**.5
+class NadarayaWatsonRegressor:
+    def __init__(self, train_X, train_y, test_X, bandwidth=1):
+        self.train_X = train_X
+        self.train_y = train_y
+        self.test_X = test_X
+        self.bandwidth = bandwidth
+        
+    def Gaussian_kernal(self, x1, x2):
+        return np.exp(-np.sum(((x1-x2)/self.bandwidth)**2)) / (2*np.pi)**.5
     
-    output = np.zeros(test_X.shape[0])
-    for i, test in enumerate(test_X):
-        K = np.apply_along_axis(Gaussian_kernal, 1, X, test, bandwidth)
-        output[i] = (K*y).sum()/K.sum()
+    def EachStep(self, test):
+        K = np.apply_along_axis(self.Gaussian_kernal, 1, self.train_X, test)
+        return (K*self.train_y).sum()/K.sum()
+    
+    def Get_output(self):
+        return np.apply_along_axis(self.EachStep, 1, self.test_X)
 
-    return np.array(output)
 
 n = 200; p = 20
 ## Training set
@@ -32,8 +39,8 @@ y = np.sum(X, axis = 1) + np.random.normal(size=n)
 X_test = np.random.multivariate_normal(np.zeros(p), np.identity(p), 40)
 y_test = np.sum(X_test, axis = 1) + np.random.normal(size=40)
 ## Predictions
-y_pred = NadarayaWatsonRegressor(X, y, X)
-y_pred_test = NadarayaWatsonRegressor(X, y, X_test)
+y_pred = NadarayaWatsonRegressor(X, y, X).Get_output()
+y_pred_test = NadarayaWatsonRegressor(X, y, X_test).Get_output()
 ## Performances
 print(get_RMSE(y, y_pred))
 print(get_RMSE(y_test, y_pred_test))
@@ -55,12 +62,17 @@ X = dat[["Critic_Score", "Critic_Count", "User_Score"]].values
 
 
 from sklearn.model_selection import KFold
-kf = KFold(n_splits = 10); errors = np.array([])
-for train_index, test_index in kf.split(X):
-    train_X, train_y = X[train_index], y[train_index]
-    test_X, test_y = X[test_index], y[test_index]
-    pred_y = NadarayaWatsonRegressor(train_X, train_y, test_X)
-    errors = np.append(errors, get_RMSE(test_y, pred_y))
+kf = KFold(n_splits = 10); errors = np.array([]); cv_errors = np.array([])
+for bandwidth in [1,2,3,4,5]:
+    for train_index, test_index in kf.split(X):
+        train_X, train_y = X[train_index], y[train_index]
+        test_X, test_y = X[test_index], y[test_index]
+        pred_y = NadarayaWatsonRegressor(train_X, train_y, test_X, bandwidth).Get_output()
+        errors = np.append(errors, get_RMSE(test_y, pred_y))
+    cv_errors = np.append(cv_errors, errors.mean())
+
+import matplotlib.pyplot as plt
+plt.plot(np.arange(5), cv_errors); plt.show()
 
 
 
@@ -88,16 +100,12 @@ for i in range(4):
 
 print(cov_matrix)
 
-
 ###### b ###################################
 for i in [10, 20, 30, 40, 100, 500]:
     y_real = np.sum(X, axis=1) + np.random.normal(size=n)
     reg = RandomForestRegressor(n_estimators=i).fit(X, y_real)
     y_pred = reg.predict(X)
     print(np.std(y_pred))
-
-
-
 
 
 
@@ -131,7 +139,7 @@ y = np.hstack((np.ones(50), -np.ones(50)))
 W = np.ones(100)/100
 
 cut, pred = CART(X, y, W).values()
-import matplotlib.pyplot as plt
+
 plt.scatter(X, y); plt.axvline(x=cut); plt.show()
 
 
