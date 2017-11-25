@@ -23,24 +23,24 @@ library(MASS)
 set.seed(1)
 P = 20; N = 200
 X = as.matrix(mvrnorm(N, mu=rep(0,P), Sigma=diag(P)))
-beta = as.matrix(c(.5, .5, .5, .5))
+
+beta = c(.5, .5, .5, .5)
 # Y = 1 + X[, 1:4] %*% beta + rnorm(N)
 
-
 library(randomForest)
-mtry_ = c(2,3,4,5); nodesize_ = c(1,2,3,4)
+mtry_ = c(2, 3, 4, 5); nodesize_ = c(1, 2, 3, 4)
 Y_real = array(0, dim=c(N, 20)); Y_pred = array(0, dim=c(N, 20))
 cov_matrix = array(0, c(4, 4))
 for(i in 1:4){
   for(j in 1:4){
-    for(z in 1:20){
-      Y_real[, z] = 1 + X[, 1:4] %*% beta + rnorm(N)
-      dat = data.frame(y=Y_real[, z], X)
+    for(k in 1:20){
+      Y_real[, k] = 1 + X[, 1:4] %*% beta + rnorm(N)
+      dat = data.frame(y=Y_real[, k], X)
       model <- randomForest(y ~ ., data = dat,
+                            ntree = 10,
                             mtry=mtry_[i],
-                            nodesize=nodesize_[j],
-                            ntree=10)
-      Y_pred[, z] = predict(model, newdata=dat)
+                            nodesize=nodesize_[j])
+      Y_pred[, k] = predict(model, newdata = dat, type="response")
     }
     cov_matrix[i, j] = sum(diag(cov(t(Y_real), t(Y_pred))))
   }
