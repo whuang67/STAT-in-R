@@ -1,20 +1,39 @@
-Gaussian_Kernal <- function(x) 1/sqrt(2*pi) * exp(-x^2)
-f_x <- function(x, y){
-  K <- Gaussian_Kernal(x)
-  return(sum(K*y)/sum(K))
+###### Question 1 #######################################################
+#########################################################################
+#########################################################################
+###### a ################################################################
+NadarayaWatson <- function(x, y, test=x, bandwidth=1){
+  Gaussian_Kernal <- function(x1, x2) 1/sqrt(2*pi) * exp(-sum(((x1-x2)/bandwidth)^2))
+  
+  EachStep <- function(test){
+    K = apply(x, MARGIN=1, FUN=Gaussian_Kernal, test)
+    return(sum(K*y) / sum(K))
+  }
+  
+  output <- apply(x, MARGIN=1, FUN=EachStep)
+  return(output) 
 }
 
+get_RMSE <- function(y_real, y_pred) (mean((y_real-y_pred)^2))^.5
 
-x <- runif(100)
-y <- 1 + 3*x + rnorm(100)
+P = 20; N = 200
+X = as.matrix(mvrnorm(N, mu=rep(0,P), Sigma=diag(P)))
+y = apply(X, 1, sum) + rnorm(N)
+
+X_test = as.matrix(mvrnorm(40, mu=rep(0,P), Sigma=diag(P)))
+y_test = apply(X_test, 1, sum) + rnorm(40)
+
+get_RMSE(y, NadarayaWatson(X, y))
+get_RMSE(y_test, NadarayaWatson(X, y, X_test))
+
+###### b ################################################################
+dat = read.csv("C:/users/whuang67/downloads/Video_Games_Sales_as_at_22_Dec_2016.csv")
+y = log(dat$Global_Sales + 1)
+X = subset(dat, select = c("Critic_Score", "Critic_Count", "User_Score"))
+X$User_Score = as.numeric(as.character(X$User_Score))
+dat1 = na.omit(data.frame(y, X))
 
 
-predict = f_x(x, y)
-
-mean((predict - y)^2)
-
-ggplot(mapping = aes(x = x, y = y)) + geom_point()
-ggplot(mapping = aes(x = x, y = predict)) + geom_point()
 ###### Question 2 #######################################################
 #########################################################################
 #########################################################################
@@ -47,6 +66,14 @@ for(i in 1:4){
 }
 cov_matrix
 
+Y_real = array(0, dim=c(N, 20)); Y_pred = array(0, dim=c(N, 20))
+for(k in 1:20){
+  Y_real[, k] = 1 + X[, 1:4] %*% beta + rnorm(N)
+  model = randomForest(X, Y_real[, k])
+  Y_pred[, k] = predict(model, newdata = X)
+}
+
+sum(diag(cov(t(Y_real), t(Y_pred))))
 
 ###### b ################################################################
 
