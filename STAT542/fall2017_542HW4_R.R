@@ -42,9 +42,8 @@ library(MASS)
 set.seed(1)
 P = 20; N = 200
 X = as.matrix(mvrnorm(N, mu=rep(0,P), Sigma=diag(P)))
-
 beta = c(.5, .5, .5, .5)
-# Y = 1 + X[, 1:4] %*% beta + rnorm(N)
+Y_mean = 1 + X[, 1:4] %*% beta
 
 library(randomForest)
 mtry_ = c(2, 3, 4, 5); nodesize_ = c(1, 2, 3, 4)
@@ -53,7 +52,7 @@ cov_matrix = array(0, c(4, 4))
 for(i in 1:4){
   for(j in 1:4){
     for(k in 1:20){
-      Y_real[, k] = 1 + X[, 1:4] %*% beta + rnorm(N)
+      Y_real[, k] =  Y_mean + rnorm(N)
       dat = data.frame(y=Y_real[, k], X)
       model <- randomForest(y ~ ., data = dat,
                             ntree = 10,
@@ -66,16 +65,13 @@ for(i in 1:4){
 }
 cov_matrix
 
-Y_real = array(0, dim=c(N, 20)); Y_pred = array(0, dim=c(N, 20))
-for(k in 1:20){
-  Y_real[, k] = 1 + X[, 1:4] %*% beta + rnorm(N)
-  model = randomForest(X, Y_real[, k])
-  Y_pred[, k] = predict(model, newdata = X)
-}
-
-sum(diag(cov(t(Y_real), t(Y_pred))))
-
 ###### b ################################################################
+y_real = Y_mean + rnorm(N)
+for(tree in c(100, 200, 500, 1000)){
+  model <- randomForest(X, y_real, ntree = tree)
+  y_pred = predict(model, X)
+  print(sd(y_pred) * (N-1)/N)
+}
 
 
 ###### Question 3 #######################################################
