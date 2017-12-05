@@ -19,6 +19,12 @@ ggplot(data = dat) +
   facet_grid(as.factor(year)~.)
 
 
+ggplot(data = dat) +
+  geom_histogram(mapping = aes(x = PM_US.Post^.2), 
+                 bins = 30)
+ggplot(data = dat) +
+  geom_histogram(mapping = aes(x = PM_US.Post),
+                 bins = 30)
 
 #### Responses
 general_plot("PM_Jingan")
@@ -81,9 +87,7 @@ scatter_plot("Iprec")
 
 ##########################################################################
 ##########################################################################
-get_RMSE <- function(actual, predicted){
-  return(mean((actual-predicted)^2)^.5)
-}
+get_RMSE <- function(actual, predicted) return(mean((actual-predicted)^2)^.5)
 ### remove more missing values here.
 dat1 <- dat[is.na(dat$PM_US.Post) == FALSE, ]
 
@@ -125,10 +129,13 @@ test_dat <- dat1[-idx, ]
 model_1 <- lm(PM_US.Post ~ DEWP + HUMI + PRES + TEMP + Iws + as.factor(cbwd) +
                 precipitation + Iprec + as.factor(month) + as.factor(hour) +
                 weekday, data = train_dat)
+summary(model_1)
 par(mfrow = c(2,2))
 plot(model_1)
 library(MASS)
 boxcox(model_1)
+
+
 
 library(faraway)
 vif(model_1)
@@ -259,3 +266,6 @@ max(dat$PM_Xuhui, na.rm = TRUE)
 
 library(rsconnect)
 deployApp(appDir = "C:/users/whuang67/downloads/New folder/STAT443")
+
+library(rsconnect)
+deployApp(appDir = "C:/users/whuang67/downloads/New folder/443_3")
