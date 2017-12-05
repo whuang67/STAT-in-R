@@ -23,14 +23,23 @@ The parameters $\beta$ including the intercept is calculated by $\hat{\beta} = (
 Additionally, multicollinearity may also be a potential issue that influence the performance of our linear regression model. Variance Inflation Factor (VIF) is used here to help detect. Variables `DEWP` and `TEMP` are removed. 
 
 ### 3.2 Stochastic Gradient Descent Linear Regression
-Stochastic Gradient Descent is another algorithm that helps us approach the weights ($\beta$s) of the linear regression. Unlike OLS, there is no mathematical assumption or restriction that prevents us from using it. We consider $loss = \displaystyle\frac{1}{n}\sum_{i=1}^{n}(y_i-\hat{y_i})^2$ as our Loss Function. We will try 1000 steps and the learning rate is eventually set to be 0.0000019 after many attempts. 
+Stochastic Gradient Descent is another algorithm that helps us approach the weights ($\beta$s) of the linear regression. Unlike OLS, there is no mathematical assumption or restriction that prevents us from using it. We consider $loss = \displaystyle\frac{1}{n}\sum_{i=1}^{n}(y_i-\hat{y_i})^2$ as our Loss Function. We will try 2000 steps and the learning rate is eventually set to be 0.0000019 after many attempts. 
 
-Currently, we have not figured out if log transformation would be helpful or plausible since the minima of $\displaystyle\frac{1}{n}\sum_{i=1}^{n}(y_i-\hat{y_i})^2$ and \displaystyle\frac{1}{n}\sum_{i=1}^{n}(e^{y_i}-e^{\hat{y_i}})^2$ may not be exactly the same. 
+So far, we have not figured out if log transformation would be helpful or plausible since the minima of $\displaystyle\frac{1}{n}\sum_{i=1}^{n}(y_i-\hat{y_i})^2$ and \displaystyle\frac{1}{n}\sum_{i=1}^{n}(e^{y_i}-e^{\hat{y_i}})^2$ may not be exactly the same. 
 
-### 3.2 Random Forest
+| Linear Model | train RMSE | test RMSE |
+|:------------:|:----------:|:---------:|
+|      OLS     |  36.95492  |   37.016  |
+|  SGD (2000)  |  38.44199  |  38.5286  |
+
+### 3.3 Random Forest
 Every feature and response without transformation are considered here since Random Forest does not have to follow those OLS Regression assumptions. And Random Forest is one of the tree based models which are greedy learners. Hence, multicollinearity is not a problem, either. The tree number is set to be 100 because more trees will not change the performance basically but the running time will increase dramatically, and more trees may lead to overfitting. 
 
 | ntree | train RMSE | error RMSE |
 |:-----:|:----------:|:----------:|
 |  100  |  12.63167  |  28.43827  |
 |  500  |  12.46093  |  28.45565  |
+
+## Reference
+1. Hastie, H., Tibshirani, R. & Friedman, J., (2009, 2nd edition) The Elements of Statistical Learning: Data Mining, Inference, and Prediction: Springer.  
+2. Grus, J., (2015) Data Science from Scratch: O'Reilly Media
