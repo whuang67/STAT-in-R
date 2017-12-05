@@ -1,5 +1,5 @@
 # **STAT 443** PM 2.5 Project
-We have attempted three different algorithms here, Ordinary Least Square (OLS) Linear Regression, Random Forest and Stochastic Gradient Descent Linear Regression.
+We have attempted three different algorithms here, Ordinary Least Square (OLS) Linear Regression, Stochastic Gradient Descent Linear Regression and Random Forest.
 
 ## 1. Data Preparation
 ### 1.1 Imputation (Missing Values)
@@ -15,6 +15,9 @@ Variables *No*, *year*, *day*, *season* and *Date* will not be taken into consid
 **Date**: Same as variable *No*. This variable is used to help index each observation, which is similar to the primary key in the SQL query.
 
 We convert variable **Date** into a new variable **weekday** (Sunday, Monday, ...) based on the calendar. Hence, we will keep useful information that cannot be used directly in the dataset. 
+
+## 2. Data Visualization 
+Shiny application is built here to help us visualize the whole plot. Currently, you can click [here](https://wenkehuang.shinyapps.io/stat443/) to have access to the app. The access code will be *group5* same as the user name.
 
 ## 3. Prediction
 ### 3.1 Ordinary Least Square Linear Regression
