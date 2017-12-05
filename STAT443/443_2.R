@@ -20,16 +20,17 @@ get_RMSE <- function(actual, predicted) return(mean((actual-predicted)^2)^.5)
 
 ### remove more missing values here.
 dat1 <- dat[(is.na(dat$PM_US.Post) == FALSE) &
-              is.na(dat$y) == FALSE, ]
+              (is.na(dat$y) == FALSE) &
+              (is.na(dat$cbwd) == FALSE), ]
 # dat1 <- dat[is.na(dat$PM_US.Post) == FALSE, ]
 
 dat1$DEWP[is.na(dat1$DEWP)] <- median(dat1$DEWP, na.rm=TRUE)
 dat1$HUMI[is.na(dat1$HUMI)] <- median(dat1$HUMI, na.rm=TRUE)
 dat1$PRES[is.na(dat1$PRES)] <- median(dat1$PRES, na.rm=TRUE)
 dat1$TEMP[is.na(dat1$TEMP)] <- median(dat1$TEMP, na.rm=TRUE)
-dat1$cbwd <- as.character(dat1$cbwd)
-dat1$cbwd[is.na(dat1$cbwd)] <- "NE"
-dat1$cbwd <- as.factor(dat1$cbwd)
+# dat1$cbwd <- as.character(dat1$cbwd)
+# dat1$cbwd[is.na(dat1$cbwd)] <- "NE"
+# dat1$cbwd <- as.factor(dat1$cbwd)
 dat1$Iws[is.na(dat1$Iws)] <- median(dat1$Iws, na.rm=TRUE)
 dat1$precipitation[is.na(dat1$precipitation)] <- median(dat1$precipitation, na.rm=TRUE)
 dat1$Iprec[is.na(dat1$Iprec)] <- median(dat1$Iprec, na.rm=TRUE)
@@ -46,9 +47,25 @@ idx <- sample(1:nrow(dat1), nrow(dat1)*0.8)
 train_dat <- dat1[idx, ]; test_dat <- dat1[-idx, ]
 
 set.seed(1)
-model_1 <- lm(log(y+1) ~ log(PM_US.Post+1) + DEWP + HUMI + PRES + TEMP + Iws + as.factor(cbwd) +
-                precipitation + Iprec + as.factor(month) + as.factor(hour) +
+model_1 <- lm(log(y+1) ~ log(PM_US.Post+1) + DEWP + HUMI + PRES + TEMP + log(Iws+1) + as.factor(cbwd) +
+                log(precipitation+1) + log(Iprec+1) + as.factor(month) + as.factor(hour) +
                 weekday, data = train_dat)
+
+ggplot(data = dat) + geom_histogram(mapping = aes(x=log(Iws+1)))
+
+library(faraway)
+
+
+
+model_ <- lm(log(y+1) ~ log(PM_US.Post+1) + HUMI + PRES + log(Iws+1) + as.factor(cbwd) +
+                log(precipitation+1) + log(Iprec+1) + as.factor(month) + as.factor(hour) +
+                weekday, data = train_dat)
+vif(model_)
+par(mfrow = c(2,2))
+plot(model_)
+get_RMSE(train_dat$y, exp(predict(model_, train_dat))-1)
+get_RMSE(test_dat$y, exp(predict(model_, test_dat))-1)
+
 
 summary(model_1)
 par(mfrow = c(2,2))
@@ -56,21 +73,24 @@ plot(model_1)
 get_RMSE(train_dat$y, exp(predict(model_1, train_dat))-1)
 get_RMSE(test_dat$y, exp(predict(model_1, test_dat))-1)
 
-
+model_2 <- step(model_1, direction = "both")
+get_RMSE(train_dat$y, exp(predict(model_2, train_dat))-1)
+get_RMSE(test_dat$y, exp(predict(model_2, test_dat))-1)
 
 library(randomForest)
-model_rf <- randomForest(log(y+1) ~ PM_US.Post + DEWP + HUMI + PRES + TEMP + Iws + cbwd +
+model_rf <- randomForest(y ~ PM_US.Post + DEWP + HUMI + PRES + TEMP + Iws + cbwd +
                            precipitation + Iprec + month + hour + weekday, data = train_dat,
-                         inportance = TRUE)
+                         ntree = 500)
 variableImportance <- data.frame(model_rf$importance)
 ggplot(data=variableImportance) +
   geom_bar(mapping = aes(x=row.names(variableImportance),
                          y=IncNodePurity),
            stat = "identity")
-
-get_RMSE(train_dat$y, exp(predict(model_rf, train_dat))-1)
-get_RMSE(test_dat$y, exp(predict(model_rf, test_dat))-1)
-
+# 100, 500 no difference
+get_RMSE(train_dat$y, (predict(model_rf, train_dat)))
+get_RMSE(test_dat$y, (predict(model_rf, test_dat)))
+## 100: train 12.63167, test 28.43827
+## 500: train 12.46093, test 28.45565
 
 
 model_2 <- lm(y ~ PM_US.Post + DEWP + HUMI + PRES + TEMP + Iws + as.factor(cbwd) +
@@ -137,14 +157,15 @@ get_RMSE <- function(actual, predicted) return(mean((actual-predicted)^2)^.5)
 
 ### remove more missing values here.
 dat1 <- dat[(is.na(dat$PM_US.Post) == FALSE) &
-              is.na(dat$y) == FALSE, ]
+              (is.na(dat$y) == FALSE) &
+              (is.na(dat$cbwd) == FALSE), ]
 dat1$DEWP[is.na(dat1$DEWP)] <- median(dat1$DEWP, na.rm=TRUE)
 dat1$HUMI[is.na(dat1$HUMI)] <- median(dat1$HUMI, na.rm=TRUE)
 dat1$PRES[is.na(dat1$PRES)] <- median(dat1$PRES, na.rm=TRUE)
 dat1$TEMP[is.na(dat1$TEMP)] <- median(dat1$TEMP, na.rm=TRUE)
-dat1$cbwd <- as.character(dat1$cbwd)
-dat1$cbwd[is.na(dat1$cbwd)] <- "NE"
-dat1$cbwd <- as.factor(dat1$cbwd)
+# dat1$cbwd <- as.character(dat1$cbwd)
+# dat1$cbwd[is.na(dat1$cbwd)] <- "NE"
+# dat1$cbwd <- as.factor(dat1$cbwd)
 dat1$Iws[is.na(dat1$Iws)] <- median(dat1$Iws, na.rm=TRUE)
 dat1$precipitation[is.na(dat1$precipitation)] <- median(dat1$precipitation, na.rm=TRUE)
 dat1$Iprec[is.na(dat1$Iprec)] <- median(dat1$Iprec, na.rm=TRUE)
@@ -174,10 +195,3 @@ testdat_Gradient$cbwdcv <- NULL
 test_dat1 <- as.matrix(cbind(Intercept=rep(1, nrow(testdat_Gradient)), testdat_Gradient))
 ## test error
 (mean((test_dat$y - test_dat1 %*% w$weights)^2))^.5
-
-
-
-
-
-
-a <- c(1,2,3,4,5)
