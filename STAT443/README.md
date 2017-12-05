@@ -20,6 +20,12 @@ We convert variable **Date** into a new variable **weekday** (Sunday, Monday, ..
 ### 3.1 Ordinary Least Square Linear Regression
 The parameters $\beta$ including the intercept is calculated by $\hat{\beta} = (X^T X)^{-1}X^Ty$. 
 
-### 3.2 Random Forest
+### 3.2 Stochastic Gradient Descent Linear Regression
 
-### 3.3 Stochastic Gradient Descent Linear Regression
+### 3.2 Random Forest
+Every feature and response without transformation are considered here since Random Forest does not have to follow those OLS Regression assumptions. And Random Forest is one of the tree based models which are greedy learners. Hence, multicollinearity is not a problem, either. The tree number is set to be 100 because more trees will not change the performance basically but the running time will increase dramatically, and more trees may lead to overfitting. 
+
+| ntree | train RMSE | error RMSE |
+|:-----:|:----------:|:----------:|
+|  100  |  12.63167  |  28.43827  |
+|  500  |  12.46093  |  28.45565  |
