@@ -3,7 +3,11 @@ dat <- read.csv("C:/users/whuang67/downloads/ShanghaiPM20100101_20151231.csv")
 library(ggplot2)
 library(reshape2)
 
-dat2 <- melt(dat[, names(dat) %in% c("month", "PM_Jingan", "PM_Xuhui", "PM_US.Post")], id.vars = "month")
+saveRDS(model_rf_Xuhui, file="C:/users/whuang67/downloads/model_rf_Xuhui.rds")
+model_rf_Jingan <- readRDS(file="C:/users/whuang67/downloads/model_rf_Jingan.rds")
+
+dat2 <- melt(dat[, names(dat) %in% c("month", "PM_Jingan", "PM_Xuhui", "PM_US.Post")],
+             id.vars = "month")
 
 ggplot(data = dat2)+
   geom_point(mapping = aes(x = month,
@@ -13,13 +17,22 @@ ggplot(data = dat2)+
 ### Generate new variable "weekday"
 dat$Date <- as.Date(paste(dat$year, dat$month, dat$day, sep="-"))
 dat$weekday <- as.factor(weekdays(dat$Date))
-dat$y <- c(dat$PM_US.Post, rep(NA, 24))[(1+24):(52584+24)]
-dat <- dat[complete.cases(dat), ]
+dat$y <- c(dat$PM_Xuhui, rep(NA, 24))[(1+24):(52584+24)]
+# dat <- dat[complete.cases(dat), ]
 ### Useful functions
 get_RMSE <- function(actual, predicted) return(mean((actual-predicted)^2)^.5)
 
+get_Accuracy <- function(actual, predicted){
+  contToCat <- function(x) return(ifelse(x<75, "Low", ifelse(x<150, "Medium", "High")))
+  actual_cat <- sapply(actual, FUN=contToCat)
+  predicted_cat <- sapply(predicted, FUN=contToCat)
+  
+  return(list(accuracy = mean(actual_cat == predicted_cat),
+              confusionMatrix = table(actual_cat, predicted_cat)))
+}
+
 ### remove more missing values here.
-dat1 <- dat[(is.na(dat$PM_US.Post) == FALSE) &
+dat1 <- dat[(is.na(dat$PM_Xuhui) == FALSE) &
               (is.na(dat$y) == FALSE) &
               (is.na(dat$cbwd) == FALSE), ]
 # dat1 <- dat[is.na(dat$PM_US.Post) == FALSE, ]
@@ -37,9 +50,7 @@ dat1$Iprec[is.na(dat1$Iprec)] <- median(dat1$Iprec, na.rm=TRUE)
 dat1$month <- as.factor(dat1$month)
 dat1$hour <- as.factor(dat1$hour)
 
-### See the distribution of response y
-library(ggplot2)
-ggplot(data = dat) + geom_histogram(mapping = aes(x = log(y+1)))
+
 
 ### Train test split
 set.seed(1)
@@ -51,11 +62,9 @@ model_1 <- lm(log(y+1) ~ log(PM_US.Post+1) + DEWP + HUMI + PRES + TEMP + log(Iws
                 log(precipitation+1) + log(Iprec+1) + as.factor(month) + as.factor(hour) +
                 weekday, data = train_dat)
 
-ggplot(data = dat) + geom_histogram(mapping = aes(x=log(Iws+1)))
-
 library(faraway)
 
-
+vif(model_1)
 
 model_ <- lm(log(y+1) ~ log(PM_US.Post+1) + HUMI + PRES + log(Iws+1) + as.factor(cbwd) +
                 log(precipitation+1) + log(Iprec+1) + as.factor(month) + as.factor(hour) +
@@ -63,8 +72,11 @@ model_ <- lm(log(y+1) ~ log(PM_US.Post+1) + HUMI + PRES + log(Iws+1) + as.factor
 vif(model_)
 par(mfrow = c(2,2))
 plot(model_)
+
 get_RMSE(train_dat$y, exp(predict(model_, train_dat))-1)
 get_RMSE(test_dat$y, exp(predict(model_, test_dat))-1)
+get_Accuracy(train_dat$y, exp(predict(model_, train_dat))-1)
+get_Accuracy(test_dat$y, exp(predict(model_, test_dat))-1)
 
 
 summary(model_1)
@@ -76,19 +88,25 @@ get_RMSE(test_dat$y, exp(predict(model_1, test_dat))-1)
 model_2 <- step(model_1, direction = "both")
 get_RMSE(train_dat$y, exp(predict(model_2, train_dat))-1)
 get_RMSE(test_dat$y, exp(predict(model_2, test_dat))-1)
+get_Accuracy(train_dat$y, exp(predict(model_2, train_dat))-1)
+get_Accuracy(test_dat$y, exp(predict(model_2, test_dat))-1)
+
 
 library(randomForest)
-model_rf <- randomForest(y ~ PM_US.Post + DEWP + HUMI + PRES + TEMP + Iws + cbwd +
-                           precipitation + Iprec + month + hour + weekday, data = train_dat,
-                         ntree = 500)
-variableImportance <- data.frame(model_rf$importance)
-ggplot(data=variableImportance) +
-  geom_bar(mapping = aes(x=row.names(variableImportance),
-                         y=IncNodePurity),
-           stat = "identity")
+model_rf_Xuhui <- randomForest(y ~ PM_Xuhui + DEWP + HUMI + PRES + TEMP + Iws + cbwd +
+                              month + hour + weekday, data = train_dat,
+                            ntree = 500)
+# No: Iprec, precipitation
+# variableImportance <- data.frame(model_rf_US$importance)
+# ggplot(data=variableImportance) +
+#   geom_bar(mapping = aes(x=row.names(variableImportance),
+#                          y=IncNodePurity),
+#            stat = "identity")
 # 100, 500 no difference
-get_RMSE(train_dat$y, (predict(model_rf, train_dat)))
-get_RMSE(test_dat$y, (predict(model_rf, test_dat)))
+get_RMSE(train_dat$y, (predict(model_rf_US, train_dat)))
+get_RMSE(test_dat$y, (predict(model_rf_US, test_dat)))
+get_Accuracy(train_dat$y, (predict(model_rf_US, train_dat)))
+get_Accuracy(test_dat$y, (predict(model_rf_US, test_dat)))
 ## 100: train 12.63167, test 28.43827
 ## 500: train 12.46093, test 28.45565
 
