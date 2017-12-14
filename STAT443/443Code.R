@@ -1,3 +1,9 @@
+####################################################################################
+## 1. The models that support Shiny app can be obtained by running lines 149-152. ##
+## 2. In order to run Shiny locally, please put app.R, the csv file and these     ##
+##    three models from 1. in the same folder.                                    ##
+####################################################################################
+
 dat <- read.csv("ShanghaiPM20100101_20151231.csv")
 
 ###### Useful functions ######
