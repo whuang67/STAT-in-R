@@ -17,9 +17,9 @@ Variables *No*, *year*, *day*, *season* and *Date* will not be taken into consid
 We convert variable **Date** into a new variable **weekday** (Sunday, Monday, ...) based on the calendar. Hence, we will keep useful information that cannot be used directly in the dataset. 
 
 ## 2. Data Visualization 
-Shiny application is built here to help us visualize the whole plot. Currently, you can click [here](https://wenkehuang.shinyapps.io/stat443/) to have access to the app. The access code will be *group5* same as the user name.
+You can click [here](https://wenkehuang.shinyapps.io/443_3/) to have access to the Shiny application. The password is *group5* which is the same as the user name. 
 
-## 3. Prediction
+## 3. Predictive Models
 ### 3.1 Ordinary Least Square Linear Regression
 The parameters $\beta$ including the intercept is calculated by $\hat{\beta} = (X^T X)^{-1}X^Ty$. We would like to start from the full model with every features. Based on the dignostics plots, we notice that the model does not follow the OLS Regression assumptions and the dataset contains outliers. We perform variable log transformation to help solves these issues. The new diagnostics plots look much better than the previous four. 
 
@@ -42,6 +42,9 @@ Every feature and response without transformation are considered here since Rand
 |:-----:|:----------:|:----------:|
 |  100  |  12.63167  |  28.43827  |
 |  500  |  12.46093  |  28.45565  |
+
+## 4. Predictions
+The [Shiny application](https://wenkehuang.shinyapps.io/443_3/) that we have created can also help make predictions. Either uploading a `csv` file that follow the training dataset's format or typing values into the calculator would work. 
 
 ## Reference
 1. Hastie, H., Tibshirani, R. & Friedman, J., (2009, 2nd edition) The Elements of Statistical Learning: Data Mining, Inference, and Prediction: Springer.  
