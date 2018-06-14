@@ -1,4 +1,4 @@
-library(readr)
+# library(readr)
 dat <- read.csv("C:\\users\\Wenke\\downloads\\application_train.csv")
 dat_test <- read.csv("C:\\users\\Wenke\\downloads\\application_test.csv")
 
@@ -21,21 +21,31 @@ check_NA(dat_test)
 dat_test$TARGET=2
 wholething <- rbind(dat, dat_test)
 
-for(a in names(wholething)){
-  if(grepl("EXT_SOURCE_[0-9]", a)==TRUE){
-    print(a)
+# for(a in names(wholething)){
+#   if(grepl("EXT_SOURCE_[0-9]", a)==TRUE){
+#     print(a)
+#   }
+# }
+# a <- names(wholething)[grepl("FLAG_DOCUMENT_[0-9]", names(wholething))]
+# b <- apply(subset(wholething, select=a), 1, sum, na.rm=TRUE)
+# wholething[7,]
+
+for(i in 1:ncol(wholething)){
+  if(class(wholething[,i])=="factor"){
+    print(names(wholething)[i])
+    print(length(table(wholething[,i])))
   }
 }
-a <- names(wholething)[grepl("FLAG_DOCUMENT_[0-9]", names(wholething))]
-b <- apply(subset(wholething, select=a), 1, sum, na.rm=TRUE)
-wholething[7,]
-
-check_NA(wholething)
+table(wholething$EMERGENCYSTATE_MODE)
 for(i in 1:ncol(wholething)){
   if(sum(is.na(wholething[,i]))/nrow(wholething)<0.2 && class(wholething[,i])=="numeric"){
     wholething[,i] <- ifelse(is.na(wholething[,i]), median(wholething[,i], na.rm=TRUE), wholething[,i])
+  } else if(class(wholething[,i])=="factor"){
+    wholething[,i] <- ifelse(trimws(wholething[,i], which="both")==""||is.na(wholething[,i]),
+                             "Not_Available", wholething[,i])
   }
 }
+
 check_NA(wholething)
 table(wholething$EXT_SOURCE_1)
 
@@ -52,8 +62,27 @@ for(i in 1:122){
     print(table(dat[,i]))
   }
 }
-table(dat$NAME_CONTRACT_TYPE)
 
+for(i in 1:ncol(wholething)){
+  temp=readline(prompt="press [enter] or [ANYTHING ELSE] to leave ")
+  if(temp != "") break
+  
+  column = wholething[,i]
+  var_name = names(wholething)[i]
+  if(class(column)=="numeric"){
+    plot = ggplot(data=wholething) + 
+      geom_histogram(mapping=aes_string(x=var_name)) +
+      ggtitle(paste("Histogram of", var_name))
+    print(paste(var_name, "------------------ numeric!"))
+    print(plot)
+  } else if(class(column)=="factor"){
+    print(paste(var_name, "------------------ factor!"))
+  } else if(class(column)=="integer"){
+    print(paste(var_name, "------------------ integer!"))
+  }
+}
+
+class(wholething[,1])
 
 # remove NA ############################################################
 removeNA <- apply(wholething, 2, anyNA)
